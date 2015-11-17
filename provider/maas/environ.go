@@ -1291,7 +1291,7 @@ func (environ *maasEnviron) newCloudinitConfig(hostname, primaryIface, series st
 				)
 				break
 			}
-			bridgeScript, err := setupJujuNetworking()
+			bridgeScript, err := setupJujuNetworkingNew()
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
@@ -2153,4 +2153,26 @@ func extractInterfaces(inst instance.Instance, lshwXML []byte) (map[string]iface
 	}
 	err := processNodes(lshw.Nodes)
 	return interfaces, primaryIface, err
+}
+
+// setupJujuNetworking returns a string representing the script to run
+// in order to prepare the Juju-specific networking config on a node.
+func setupJujuNetworkingNew() (string, error) {
+	parsedTemplate := template.Must(
+		template.New("bridgeScriptMain").Parse(bridgeScriptMain),
+	)
+	var buf bytes.Buffer
+	err := parsedTemplate.Execute(&buf, map[string]interface{}{
+		"Config": "/etc/network/interfaces",
+		"Bridge": instancecfg.DefaultBridgeName,
+	})
+	if err != nil {
+		return "", errors.Annotate(err, "modify /etc/network/interfaces script template error")
+	}
+	logger.Infof(bridgeScriptBase + buf.String())
+	return modifyEtcNetworkInterfacesScriptNew() + buf.String(), nil
+}
+
+func modifyEtcNetworkInterfacesScriptNew() string {
+	return bridgeScriptBase
 }
