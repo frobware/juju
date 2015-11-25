@@ -42,11 +42,11 @@ func (s *bridgeConfigSuite) SetUpTest(c *gc.C) {
 	c.Assert(err, jc.ErrorIsNil)
 }
 
-func (s *bridgeConfigSuite) assertScript(c *gc.C, initialConfig, expectedConfig, addrFamily, nic, bridge string) {
+func (s *bridgeConfigSuite) assertScript(c *gc.C, initialConfig, expectedConfig, addrFamily, nic, bridge string, isBond uint) {
 	err := ioutil.WriteFile(s.testConfigPath, []byte(initialConfig), 0644)
 	c.Check(err, jc.ErrorIsNil)
 	// Run the script and verify the modified config.
-	output, code := s.runScript(c, addrFamily, nic, s.testConfigPath, bridge)
+	output, code := s.runScript(c, addrFamily, nic, s.testConfigPath, bridge, isBond)
 	c.Check(code, gc.Equals, 0)
 	c.Check(output, gc.Equals, "")
 	data, err := ioutil.ReadFile(s.testConfigPath)
@@ -98,7 +98,7 @@ func (s *bridgeConfigSuite) TestBridgeScriptWithInvalidParams(c *gc.C) {
 		c.Check(err, jc.ErrorIsNil)
 
 		// Run and check it fails.
-		output, code := s.runScript(c, test.params[0], test.params[1], test.params[2], test.params[3])
+		output, code := s.runScript(c, test.params[0], test.params[1], test.params[2], test.params[3], 0)
 		c.Check(code, gc.Equals, 1)
 		c.Check(output, gc.Equals, "")
 
@@ -110,42 +110,47 @@ func (s *bridgeConfigSuite) TestBridgeScriptWithInvalidParams(c *gc.C) {
 }
 
 func (s *bridgeConfigSuite) TestBridgeScriptWithZeroArgs(c *gc.C) {
-	_, code := s.runScript(c, "", "", "", "")
+	_, code := s.runScript(c, "", "", "", "", 0)
 	c.Check(code, gc.Equals, 1)
 }
 
 func (s *bridgeConfigSuite) TestBridgeScriptDHCP(c *gc.C) {
-	s.assertScript(c, networkDHCPInitial, networkDHCPExpected, "inet", "eth0", "juju-br0")
+	s.assertScript(c, networkDHCPInitial, networkDHCPExpected, "inet", "eth0", "juju-br0", 0)
 }
 
 func (s *bridgeConfigSuite) TestBridgeScriptStatic(c *gc.C) {
-	s.assertScript(c, networkStaticInitial, networkStaticExpected, "inet", "eth0", "juju-br0")
+	s.assertScript(c, networkStaticInitial, networkStaticExpected, "inet", "eth0", "juju-br0", 0)
 }
 
 func (s *bridgeConfigSuite) TestBridgeScriptMultiple(c *gc.C) {
-	s.assertScript(c, networkMultipleInitial, networkMultipleExpected, "inet", "eth0", "juju-br0")
+	s.assertScript(c, networkMultipleInitial, networkMultipleExpected, "inet", "eth0", "juju-br0", 0)
 }
 
 func (s *bridgeConfigSuite) TestBridgeScriptWithAlias(c *gc.C) {
-	s.assertScript(c, networkWithAliasInitial, networkWithAliasExpected, "inet", "eth0", "juju-br0")
+	s.assertScript(c, networkWithAliasInitial, networkWithAliasExpected, "inet", "eth0", "juju-br0", 0)
 }
 
 func (s *bridgeConfigSuite) TestBridgeScriptDHCPWithAlias(c *gc.C) {
-	s.assertScript(c, networkDHCPWithAliasInitial, networkDHCPWithAliasExpected, "inet", "eth0", "juju-br0")
+	s.assertScript(c, networkDHCPWithAliasInitial, networkDHCPWithAliasExpected, "inet", "eth0", "juju-br0", 0)
 }
 
 func (s *bridgeConfigSuite) TestBridgeScriptMultipleStaticWithAliases(c *gc.C) {
-	s.assertScript(c, networkMultipleStaticWithAliasesInitial, networkMultipleStaticWithAliasesExpected, "inet", "eth0", "juju-br0")
+	s.assertScript(c, networkMultipleStaticWithAliasesInitial, networkMultipleStaticWithAliasesExpected, "inet", "eth0", "juju-br0", 0)
 }
 
-func (s *bridgeConfigSuite) runScript(c *gc.C, addressFamily, nic, configFile, bridgeName string) (output string, exitCode int) {
-	script := fmt.Sprintf("%s\n%s %q %q %q %q\n",
+func (s *bridgeConfigSuite) TestBridgeScriptDHCPWithBond(c *gc.C) {
+	s.assertScript(c, networkDHCPWithBondInitial, networkDHCPWithBondExpected, "inet", "bond0", "juju-br0", 1)
+}
+
+func (s *bridgeConfigSuite) runScript(c *gc.C, addressFamily, nic, configFile, bridgeName string, isBond uint) (output string, exitCode int) {
+	script := fmt.Sprintf("%s\n%s %q %q %q %q %v\n",
 		bridgeScriptBase,
 		"modify_network_config",
 		addressFamily,
 		nic,
 		configFile,
-		bridgeName)
+		bridgeName,
+		isBond)
 
 	result, err := exec.RunCommands(exec.RunParams{Commands: script})
 	c.Assert(err, jc.ErrorIsNil, gc.Commentf("script failed unexpectedly"))
@@ -325,3 +330,70 @@ iface eth1 inet manual
 
 dns-nameservers 10.17.20.200
 dns-search maas`
+
+const networkDHCPWithBondInitial = `auto eth0
+iface eth0 inet manual
+    bond-lacp_rate slow
+    bond-xmit_hash_policy layer2
+    bond-miimon 100
+    bond-master bond0
+    mtu 1500
+    bond-mode active-backup
+
+auto eth1
+iface eth1 inet manual
+    bond-lacp_rate slow
+    bond-xmit_hash_policy layer2
+    bond-miimon 100
+    bond-master bond0
+    mtu 1500
+    bond-mode active-backup
+
+auto bond0
+iface bond0 inet dhcp
+    bond-lacp_rate slow
+    bond-xmit_hash_policy layer2
+    bond-miimon 100
+    mtu 1500
+    bond-mode active-backup
+    hwaddress 52:54:00:1c:f1:5b
+    bond-slaves none
+
+dns-nameservers 10.17.20.200
+dns-search maas19
+`
+
+const networkDHCPWithBondExpected = `auto eth0
+iface eth0 inet manual
+    bond-lacp_rate slow
+    bond-xmit_hash_policy layer2
+    bond-miimon 100
+    bond-master bond0
+    mtu 1500
+    bond-mode active-backup
+
+auto eth1
+iface eth1 inet manual
+    bond-lacp_rate slow
+    bond-xmit_hash_policy layer2
+    bond-miimon 100
+    bond-master bond0
+    mtu 1500
+    bond-mode active-backup
+
+auto bond0
+iface bond0 inet manual
+    bond-lacp_rate slow
+    bond-xmit_hash_policy layer2
+    bond-miimon 100
+    mtu 1500
+    bond-mode active-backup
+    hwaddress 52:54:00:1c:f1:5b
+    bond-slaves none
+
+dns-nameservers 10.17.20.200
+dns-search maas19
+auto juju-br0
+iface juju-br0 inet dhcp
+    bridge_ports bond0
+`

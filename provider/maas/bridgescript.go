@@ -21,16 +21,14 @@ fatal()
 # Returns 1 on any error, otherwise 0 for success.
 #
 modify_network_config() {
-    [ $# -lt 4 ] && return 1
-
-    if [ -z "$1" ] || [ -z "$2" ] || [ -z "$3" ] || [ -z "$4" ]; then
-	return 1
-    fi
+    [ $# -ge 5 ] || return 1
+    [ -z "$1" ] || [ -z "$2" ] || [ -z "$3" ] || [ -z "$4" ] || [ -z "$5" ] && return 1
 
     local address_family=$1
     local primary_nic=$2
     local configfile=$3
     local bridge=$4
+    local primary_nic_is_bonded=$5
 
     [ -f "$configfile" ] || return 1
 
@@ -40,6 +38,16 @@ modify_network_config() {
 
     grep -q -E "iface $primary_nic\s+$address_family\s+" "$configfile" || return 1
     grep -q -E "auto $primary_nic[^:]*$" "$configfile" || return 1
+
+    if [ $primary_nic_is_bonded -eq 1 ]; then
+	local iface_config=$(awk "/^\s*iface\s+${primary_nic}\s+${address_family}\s+[^ ]+/ {print \$4}" "$configfile")
+	if [ $? -ne 0 ] || [ -z "$iface_config" ]; then
+	    fatal "could not determine method for $primary_nic"
+	fi
+	sed -ri "s/^\s*iface\s+${primary_nic}\s+${address_family}\s+(.*)$/iface $primary_nic $address_family manual/" "$configfile" || fatal 'sed failed'
+	sed -i "\$aauto $bridge\niface $bridge $address_family $iface_config\n    bridge_ports $primary_nic" "$configfile" || fatal 'sed failed'
+	return 0
+    fi
 
     # Change:
     #     iface eth0 inet dhcp|manual|static
@@ -174,10 +182,17 @@ main() {
 	fatal "cannot discover ipv4 and ipv6 gateway"
     fi
 
+    local bonding_masters_file=/sys/class/net/bonding_masters
+    local ipv4_primary_nic_is_bonded=0
+
+    if [ -f $bonding_masters_file ] && grep $ipv4_primary_nic $bonding_masters_file; then
+	ipv4_primary_nic_is_bonded=1
+    fi
+
     local modify_network_config_failed=0
 
     if [ -n "$ipv4_gateway" ]; then
-	modify_network_config "inet" "$ipv4_primary_nic" "$new_config_file" "$BRIDGE"
+	modify_network_config "inet" "$ipv4_primary_nic" "$new_config_file" "$BRIDGE" $ipv4_primary_nic_is_bonded
 	if [ $? -ne 0 ]; then
 	    modify_network_config_failed=1
 	fi
@@ -200,6 +215,19 @@ main() {
 	fi
     fi
 
+    if [ $ipv4_primary_nic_is_bonded -eq 1 ]; then
+	$IFDOWN_CMD -a -v -i "$orig_config_file"
+	/etc/init.d/networking stop
+        mv -f "$new_config_file" "$orig_config_file" || fatal "mv failed"
+	cat "$orig_config_file"
+	/etc/init.d/networking restart
+	# $IFUP_CMD -a -v -i "$new_config_file"
+	# if [ $? -ne 0 ]; then
+	#     fatal "failed to bring up all interfaces"
+	# fi
+        return 0
+    fi
+
     local nics=""
 
     if [ -n "$ipv4_gateway" ]; then
@@ -211,9 +239,9 @@ main() {
 	:
     fi
 
-    echo "--------------------------------------------------
+    echo "--------------------------------------------------"
     echo "Activating $BRIDGE configuration"
-    echo "--------------------------------------------------
+    echo "--------------------------------------------------"
     cat "$new_config_file"
 
     for nic in $nics; do
@@ -228,14 +256,15 @@ main() {
 	fatal "failed to bring up $BRIDGE"
     fi
 
-    # Bring up all aliases or bonds on the bridge.
     $IFUP_CMD -a -v -i "$new_config_file"
     if [ $? -ne 0 ]; then
 	fatal "failed to bring up all interfaces"
     fi
-
     mv -f "$new_config_file" "$orig_config_file" || fatal "mv failed"
 }
+
+#type -p brctl || fatal "brctl utility is not installed"
+#type -p ifenslave || fatal "ifenslave utility is not installed"
 
 trap 'dump_network_config "Active"' EXIT
 dump_network_config "Current"
