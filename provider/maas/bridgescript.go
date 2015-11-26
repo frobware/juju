@@ -121,6 +121,8 @@ dump_network_config() {
     echo "======================================================="
     echo
 
+    cat "$CONFIGFILE"
+
     echo "-------------------------------------------------------"
     echo "Route table contents:"
     echo "-------------------------------------------------------"
@@ -131,12 +133,6 @@ dump_network_config() {
     echo "Network devices:"
     echo "-------------------------------------------------------"
     $IFCONFIG_CMD -a
-    echo
-
-    echo "-------------------------------------------------------"
-    echo "Contents of $CONFIGFILE"
-    echo "-------------------------------------------------------"
-    cat "$CONFIGFILE"
 }
 `
 
@@ -156,7 +152,7 @@ main() {
     local new_config_file="${CONFIGFILE}-juju"
 
     # In case we already created the bridge, don't do it again.
-    grep -q "iface $BRIDGE inet" "$orig_config_file" && exit 0
+    grep -q "iface $BRIDGE inet" "$orig_config_file" && return 0
 
     # We're going to do all our mods against a new file.
     cp -a "$CONFIGFILE" "$new_config_file" || fatal "cp failed"
