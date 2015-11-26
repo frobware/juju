@@ -5,8 +5,10 @@ from __future__ import print_function
 import re
 import sys
 
+from copy import copy
+
 class SeekableIterator(object):
-    """An iterator that supports seeking backwards or forwards."""
+    """An iterator that supports seeking."""
 
     def __init__(self, iterable):
         self.iterable = iterable
@@ -35,33 +37,36 @@ class SeekableIterator(object):
             raise IndexError
 
 class Stanza(object):
-    def __init__(self, ident, options):
-        self._ident = ident
+    def __init__(self, definition, options = []):
+        self._definition = definition
         self._options = options
 
     def __str__(self):
-        return self._ident
+        return self._definition
 
     def isPhysicalInterface(self):
-        return self._ident.startswith("auto ")
+        return self._definition.startswith("auto ")
 
     def isLogicalInterface(self):
-        return self._ident.startswith("iface ")
+        return self._definition.startswith("iface ")
 
     def options(self):
-        return self._options
+        return copy(self._options)
 
-    def ident(self):
-        return self._ident
+    def definition(self):
+        return self._definition
+
+    def __str__(self):
+        return self._definition
 
     def ifaceName(self):
         if self.isPhysicalInterface():
-            return self._ident.split()[1]
+            return self._definition.split()[1]
         if self.isLogicalInterface():
-            return self._ident.split()[1]
+            return self._definition.split()[1]
         return None
 
-class ENIParser(object):
+class EtcNetworkInterfaceParser(object):
     @classmethod
     def is_stanza(cls, s):
         return re.match(r'^(iface|mapping|auto|allow-|source|dns-)', s)
@@ -91,24 +96,12 @@ class ENIParser(object):
                 stanza_options.append(line.strip())
         return Stanza(stanza_line.strip(), stanza_options)
 
-    def __str__(self):
-        return self._filename
-
-    def dump(self):
-        for s in self.stanzas():
-            print(s)
-            for line in s.options():
-                print("    {}".format(line))
-
     def stanzas(self):
-        return self._stanzas
+        for s in self._stanzas:
+            yield s
 
-def needsBridgeWork(stanza):
-    return stanza.isLogicalInterface() or stanza.isPhysicalInterface()
-
-ifaceName = "eth0"
-bridgeName = "juju-br0"
-bonded = False
+def str2bool(v):
+    return str(v).lower() in ("true", "1")
 
 def printStanza(s):
     print(s)
@@ -117,32 +110,51 @@ def printStanza(s):
     print
     if s.isLogicalInterface(): print()
 
-def main(filename):
-    eni = ENIParser(filename)
-    stanzas = eni.stanzas()
-    newStanzas = []
-    for s in stanzas:
+def main(args):
+    filename = args[0]
+    primaryNic = args[1]
+    bridgeName = args[2]
+    bonded = str2bool(args[3])
+    stanzas = []
+
+    for s in EtcNetworkInterfaceParser(filename).stanzas():
         if not s.isLogicalInterface() and not s.isPhysicalInterface():
-            newStanzas.append(s)
+            stanzas.append(s)
             continue
 
-        if ifaceName != s.ifaceName() and ifaceName not in s.ifaceName():
-            newStanzas.append(s)
+        if primaryNic != s.ifaceName() and primaryNic not in s.ifaceName():
+            stanzas.append(s)
             continue
 
         if bonded:
-            newStanzas.append(s)
+            if s.isPhysicalInterface():
+                stanzas.append(s)
+            else:
+                words = s.definition().split()
+                words[3] = "manual"
+                printStanza(s)
+                stanzas.append(Stanza(" ".join(words), s.options()))
+
+                # new auto <bridgeName>
+                stanzas.append(Stanza("auto {}".format(bridgeName)))
+
+                # new iface <bridgeName> ...
+                words = s.definition().split()
+                words[1] = bridgeName
+                options = [ x for x in s.options() if not x.startswith("bond") ]
+                options.append("bridge_ports {}".format(primaryNic))
+                stanzas.append(Stanza(" ".join(words), options))
             continue
 
-        if ifaceName == s.ifaceName():
+        if primaryNic == s.ifaceName():
             if s.isPhysicalInterface():
-                # This changes:
+                # The net change:
                 #   auto eth0
                 # to:
                 #   auto $bridgeName
-                words = s.ident().split()
+                words = s.definition().split()
                 words[1] = bridgeName
-                newStanzas.append(Stanza(" ".join(words), []))
+                stanzas.append(Stanza(" ".join(words)))
             else:
                 # The net change is:
                 #   auto eth0
@@ -152,26 +164,33 @@ def main(filename):
                 #
                 #   auto $bridgeName
                 #   iface $bridgeName inet <config>
-                words = s.ident().split()
+                words = s.definition().split()
                 words[3] = "manual"
-                lastStanza = newStanzas.pop()
-                newStanzas.append(Stanza(" ".join(words), []))
-                newStanzas.append(lastStanza)
-                # Replace existing line with new $bridgeName
-                words = s.ident().split()
+                autoStanza = stanzas.pop()
+                stanzas.append(Stanza(" ".join(words)))
+                stanzas.append(autoStanza)
+                # Replace existing iface line with new $bridgeName
+                words = s.definition().split()
                 words[1] = bridgeName
                 options = s.options()
-                options.append("bridge_ports {}".format(ifaceName))
-                newStanzas.append(Stanza(" ".join(words), options))
+                # And add the bridge ports to the existing options
+                options.append("bridge_ports {}".format(primaryNic))
+                stanzas.append(Stanza(" ".join(words), options))
             continue
 
-        alias_re = re.compile(r'{}:(?P<num>\d+)'.format(ifaceName))
+        # Aliases, which can be separated by '.' or ':'.
 
-        if ifaceName in s.ident():
-            match = alias_re.search(s.ident())
-            newStanzas.append(Stanza(s.ident().replace(ifaceName, bridgeName), s.options()))
+        alias_re = re.compile(r'{}.(?P<num>\d+)'.format(primaryNic))
 
-    for s in newStanzas:
+        if primaryNic in s.definition():
+            match = alias_re.search(s.definition())
+            stanzas.append(Stanza(s.definition().replace(primaryNic, bridgeName), s.options()))
+
+    for s in stanzas:
         printStanza(s)
-        
-main(sys.argv[1])
+
+if len(sys.argv) < 5:
+    print("usage: <filename> <primary-nic> <bridge-name> <is-bonded>")
+    sys.exit(1)
+
+main(sys.argv[1:])
