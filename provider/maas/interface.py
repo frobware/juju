@@ -7,7 +7,7 @@ from copy import copy
 
 
 class SeekableIterator(object):
-    """An iterator that supports seeking."""
+    """An iterator that supports relative seeking."""
 
     def __init__(self, iterable):
         self.iterable = iterable
@@ -44,10 +44,10 @@ class Stanza(object):
         self._options = options
 
     def is_physical_interface(self):
-        return self._definition.startswith("auto ")
+        return self._definition.startswith('auto ')
 
     def is_logical_interface(self):
-        return self._definition.startswith("iface ")
+        return self._definition.startswith('iface ')
 
     def options(self):
         return copy(self._options)
@@ -66,7 +66,7 @@ class Stanza(object):
         return self._definition
 
 
-class EtcNetworkInterfaceParser(object):
+class NetworkInterfaceParser(object):
     @classmethod
     def is_stanza(cls, s):
         return re.match(r'^(iface|mapping|auto|allow-|source|dns-)', s)
@@ -76,10 +76,10 @@ class EtcNetworkInterfaceParser(object):
         self._stanzas = []
         with open(filename) as f:
             lines = f.readlines()
-        lineiter = SeekableIterator(lines)
-        for line in lineiter:
+        line_iterator = SeekableIterator(lines)
+        for line in line_iterator:
             if self.is_stanza(line):
-                stanza = self._parse_stanza(line, lineiter)
+                stanza = self._parse_stanza(line, line_iterator)
                 self._stanzas.append(stanza)
 
     def _parse_stanza(self, stanza_line, iterable):
@@ -116,12 +116,13 @@ def main(args):
     bonded = str(args[3]).lower() in ('true', '1')
     stanzas = []
 
-    for s in EtcNetworkInterfaceParser(filename).stanzas():
+    for s in NetworkInterfaceParser(filename).stanzas():
         if not s.is_logical_interface() and not s.is_physical_interface():
             stanzas.append(s)
             continue
 
-        if primary_nic != s.interface_name() and primary_nic not in s.interface_name():
+        if primary_nic != s.interface_name() and \
+           primary_nic not in s.interface_name():
             stanzas.append(s)
             continue
 
@@ -175,10 +176,11 @@ def main(args):
                 stanzas.append(Stanza(" ".join(words), options))
             continue
 
-        # Aliases, hence the 'eth0' in 'eth0:1'.
+        # Aliases, hence the 'eth0' in 'auto eth0:1'.
 
         if primary_nic in s.definition():
-            stanzas.append(Stanza(s.definition().replace(primary_nic, bridge_name), s.options()))
+            definition = s.definition().replace(primary_nic, bridge_name)
+            stanzas.append(Stanza(definition, s.options()))
 
     for s in stanzas:
         print_stanza(s)
