@@ -264,17 +264,14 @@ with open(tmp_filename, 'w') as f:
     print_stanzas(bridged_stanzas, f)
     f.close()
 
-#
-# Bring down the existing primary NIC.
-#
 def check_shcmd(args):
     print(args)
     proc.check_call(args, shell=True)
 
 check_shcmd("cat {}".format(tmp_filename))
-check_shcmd("ifdown -v -i {} {} || true".format(args.filename, args.primary_nic))
+check_shcmd("ifdown -v -i {} {}".format(args.filename, args.primary_nic))
 check_shcmd("/etc/init.d/networking stop || true")
 check_shcmd("cp {} {}".format(tmp_filename, args.filename))
 check_shcmd("/etc/init.d/networking start || true")
-check_shcmd("ifup -a -v || true")
+check_shcmd("ifup -a -v")
 check_shcmd("/etc/init.d/networking restart || true")
