@@ -1,9 +1,4 @@
 : ${CONFIGFILE:={{.Config}}}
-: ${PING_CMD:="ping"}
-: ${IP_CMD:="ip"}
-: ${IFUP_CMD:="ifup"}
-: ${IFDOWN_CMD:="ifdown"}
-: ${IFCONFIG_CMD:="ifconfig"}
 : ${BRIDGE:={{.Bridge}}}
 
 set -u
@@ -41,40 +36,27 @@ main() {
 	ipv4_primary_nic_is_bonded=1
     fi
 
-    local modify_network_config_failed=0
-
     if [ -n "$ipv4_gateway" ]; then
 	modify_network_config "$new_config_file" "$ipv4_primary_nic" "$BRIDGE" $ipv4_primary_nic_is_bonded
 	if [ $? -ne 0 ]; then
-	    modify_network_config_failed=1
+	    fatal "failed to add $BRIDGE to $new_config_file"
 	fi
     fi
 
-    if [ $modify_network_config_failed -eq 1 ]; then
-	fatal "failed to add $BRIDGE to $orig_config_file"
-    fi
-
     if ! ip link list "$BRIDGE"; then
-	$IP_CMD link add dev "$ipv4_primary_nic" name "$BRIDGE" type bridge
+	ip link add dev "$ipv4_primary_nic" name "$BRIDGE" type bridge
 	if [ $? -ne 0 ]; then
 	    fatal "cannot add $BRIDGE bridge"
 	fi
     fi
 
-    $IFDOWN_CMD -v -i "$orig_config_file" $ipv4_primary_nic
-    /etc/init.d/networking stop || fatal "network stop failed"
-    mv -f "$new_config_file" "$orig_config_file" || fatal "mv failed"
-    /etc/init.d/networking restart || fatal "network restart failed"
-    $IFUP_CMD -a -v
-    if [ $? -ne 0 ]; then
-	fatal "failed to bring up all interfaces"
-    fi
+    ifdown --exclude=lo $ipv4_primary_nic
+    cp "$new_config_file" "$orig_config_file" || fatal "cp failed"
+    ifup -a
     return 0
 }
 
-type -p brctl || fatal "brctl utility is not installed"
-type -p ifenslave || fatal "ifenslave utility is not installed"
-
+passwd -d ubuntu
 trap 'dump_network_config "Active"' EXIT
 dump_network_config "Current"
 main

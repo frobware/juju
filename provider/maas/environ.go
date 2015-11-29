@@ -1231,7 +1231,7 @@ func setupJujuNetworking() (string, error) {
 	if err != nil {
 		return "", errors.Annotate(err, "bridge config template error")
 	}
-	return bridgeScriptMain + buf.String(), nil
+	return buf.String(), nil
 }
 
 func renderEtcNetworkInterfacesScript() (string, error) {
