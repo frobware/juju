@@ -298,6 +298,7 @@ def arg_parser():
     parser.add_argument('--bridge-prefix', help="bridge prefix", type=str, required=False, default='br-')
     parser.add_argument('--one-time-backup', help='A one time backup of filename', action='store_true', default=True, required=False)
     parser.add_argument('--activate', help='activate new configuration', action='store_true', default=False, required=False)
+    parser.add_argument('--interface', help="interface to bridge", type=str, required=False)
     parser.add_argument('filename', help="interfaces(5) based filename")
     return parser
 
@@ -307,11 +308,20 @@ def main(args):
     config_parser = NetworkInterfaceParser(args.filename)
     physical_interfaces = config_parser.physical_interfaces()
 
+    # Bridging requires modifying 'auto' and 'iface' stanzas only.
+    # Calling <iface>.bridge() will return a set of stanzas that cover
+    # both of those stanzas. The 'elif' clause catches all the other
+    # stanza types. The args.interface test is to bridge a single
+    # interface only, which is only used for juju-1.25.
+
     for s in config_parser.stanzas():
         if s.is_logical_interface:
             add_auto_stanza = s.iface.name in physical_interfaces
-            bridged_stanzas = s.iface.bridge(args.bridge_prefix, add_auto_stanza)
-            stanzas.extend(bridged_stanzas)
+            if args.interface and args.interface != s.iface.name:
+                stanzas.append(AutoStanza(s.iface.name))
+                stanzas.append(s)
+            else:
+                stanzas.extend(s.iface.bridge(args.bridge_prefix, add_auto_stanza))
         elif not s.is_physical_interface:
             stanzas.append(s)
 
@@ -344,10 +354,8 @@ def main(args):
     print_shell_cmd("ip route show")
     print_shell_cmd("brctl show")
 
-# This script re-renders an interfaces(5) file to add a bridge to all
-# active interfaces; active interfaces are those that are declared as
-# either 'static' or 'dhcp'. It also considers whether the iface is a
-# VLAN or a bond.
+# This script re-renders an interfaces(5) file to add a bridge to
+# either all active interfaces, or a specific interface.
 
 if __name__ == '__main__':
     main(arg_parser().parse_args())
