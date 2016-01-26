@@ -335,8 +335,10 @@ def main(args):
     # Bridging requires modifying 'auto' and 'iface' stanzas only.
     # Calling <iface>.bridge() will return a set of stanzas that cover
     # both of those stanzas. The 'elif' clause catches all the other
-    # stanza types. The args.interface_to_bridge test is to bridge a single
-    # interface only, which is only used for juju < 2.0.
+    # stanza types. The args.interface_to_bridge test is to bridge a
+    # single interface only, which is only used for juju < 2.0. And if
+    # that argument is specified then args.bridge_name takes
+    # precendence over any args.bridge_prefix.
 
     for s in config_parser.stanzas():
         if s.is_logical_interface:
