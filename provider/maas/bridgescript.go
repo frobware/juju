@@ -85,21 +85,22 @@ class LogicalInterface(object):
         return self.name
 
     # Returns an ordered set of stanzas to bridge this interface.
-    def bridge(self, prefix, add_auto_stanza):
+    def bridge(self, prefix, bridge_name, add_auto_stanza):
         # Note: the testing order here is significant.
         if not self.is_active:
             return self._bridge_inactive(add_auto_stanza)
         elif self.is_alias:
             return self._bridge_alias(add_auto_stanza)
         elif self.is_vlan:
-            return self._bridge_vlan(prefix, add_auto_stanza)
+            return self._bridge_vlan(prefix, bridge_name, add_auto_stanza)
         elif self.is_bonded:
-            return self._bridge_bond(prefix, add_auto_stanza)
+            return self._bridge_bond(prefix, bridge_name, add_auto_stanza)
         else:
-            return self._bridge_device(prefix)
+            return self._bridge_device(prefix, bridge_name)
 
-    def _bridge_device(self, prefix):
-        bridge_name = prefix + self.name
+    def _bridge_device(self, prefix, bridge_name):
+        if bridge_name is None:
+            bridge_name = prefix + self.name
         s1 = IfaceStanza(self.name, self.family, "manual", [])
         s2 = AutoStanza(bridge_name)
         options = list(self.options)
@@ -107,11 +108,12 @@ class LogicalInterface(object):
         s3 = IfaceStanza(bridge_name, self.family, self.method, options)
         return [s1, s2, s3]
 
-    def _bridge_vlan(self, prefix, add_auto_stanza):
+    def _bridge_vlan(self, prefix, bridge_name, add_auto_stanza):
         stanzas = []
         s1 = IfaceStanza(self.name, self.family, "manual", self.options)
         stanzas.append(s1)
-        bridge_name = prefix + self.name
+        if bridge_name is None:
+            bridge_name = prefix + self.name
         if add_auto_stanza:
             stanzas.append(AutoStanza(bridge_name))
         options = [x for x in self.options if not x.startswith("vlan")]
@@ -128,9 +130,10 @@ class LogicalInterface(object):
         stanzas.append(s1)
         return stanzas
 
-    def _bridge_bond(self, prefix, add_auto_stanza):
+    def _bridge_bond(self, prefix, bridge_name, add_auto_stanza):
         stanzas = []
-        bridge_name = prefix + self.name
+        if bridge_name is None:
+            bridge_name = prefix + self.name
         if add_auto_stanza:
             stanzas.append(AutoStanza(self.name))
         s1 = IfaceStanza(self.name, self.family, "manual", list(self.options))
@@ -310,12 +313,21 @@ def arg_parser():
     parser.add_argument('--bridge-prefix', help="bridge prefix", type=str, required=False, default='br-')
     parser.add_argument('--one-time-backup', help='A one time backup of filename', action='store_true', default=True, required=False)
     parser.add_argument('--activate', help='activate new configuration', action='store_true', default=False, required=False)
-    parser.add_argument('--interface', help="interface to bridge", type=str, required=False)
+    parser.add_argument('--interface', help="interface name to bridge", type=str, required=False)
+    parser.add_argument('--bridge-name', help="explicit bridge name (overrides bridge-prefix)", type=str, required=False)
     parser.add_argument('filename', help="interfaces(5) based filename")
     return parser
 
 
 def main(args):
+    if args.bridge_name and args.interface is None:
+        sys.stderr.write("error: --interface name required when using --bridge-name\n")
+        exit(1)
+
+    if args.interface and args.bridge_name is None:
+        sys.stderr.write("error: --bridge-name required when using --interface\n")
+        exit(1)
+
     stanzas = []
     config_parser = NetworkInterfaceParser(args.filename)
     physical_interfaces = config_parser.physical_interfaces()
@@ -333,7 +345,7 @@ def main(args):
                 stanzas.append(AutoStanza(s.iface.name))
                 stanzas.append(s)
             else:
-                stanzas.extend(s.iface.bridge(args.bridge_prefix, add_auto_stanza))
+                stanzas.extend(s.iface.bridge(args.bridge_prefix, args.bridge_name, add_auto_stanza))
         elif not s.is_physical_interface:
             stanzas.append(s)
 
