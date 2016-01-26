@@ -301,19 +301,19 @@ def arg_parser():
     parser.add_argument('--bridge-prefix', help="bridge prefix", type=str, required=False, default='br-')
     parser.add_argument('--one-time-backup', help='A one time backup of filename', action='store_true', default=True, required=False)
     parser.add_argument('--activate', help='activate new configuration', action='store_true', default=False, required=False)
-    parser.add_argument('--interface', help="interface name to bridge", type=str, required=False)
-    parser.add_argument('--bridge-name', help="explicit bridge name (overrides bridge-prefix)", type=str, required=False)
+    parser.add_argument('--interface-to-bridge', help="interface to bridge", type=str, required=False)
+    parser.add_argument('--bridge-name', help="bridge name", type=str, required=False)
     parser.add_argument('filename', help="interfaces(5) based filename")
     return parser
 
 
 def main(args):
-    if args.bridge_name and args.interface is None:
-        sys.stderr.write("error: --interface name required when using --bridge-name\n")
+    if args.bridge_name and args.interface_to_bridge is None:
+        sys.stderr.write("error: --interface-to-bridge required when using --bridge-name\n")
         exit(1)
 
-    if args.interface and args.bridge_name is None:
-        sys.stderr.write("error: --bridge-name required when using --interface\n")
+    if args.interface_to_bridge and args.bridge_name is None:
+        sys.stderr.write("error: --bridge-name required when using --interface-to-bridge\n")
         exit(1)
 
     stanzas = []
@@ -323,13 +323,13 @@ def main(args):
     # Bridging requires modifying 'auto' and 'iface' stanzas only.
     # Calling <iface>.bridge() will return a set of stanzas that cover
     # both of those stanzas. The 'elif' clause catches all the other
-    # stanza types. The args.interface test is to bridge a single
-    # interface only, which is only used for juju-1.25.
+    # stanza types. The args.interface_to_bridge test is to bridge a single
+    # interface only, which is only used for juju < 2.0.
 
     for s in config_parser.stanzas():
         if s.is_logical_interface:
             add_auto_stanza = s.iface.name in physical_interfaces
-            if args.interface and args.interface != s.iface.name:
+            if args.interface_to_bridge and args.interface_to_bridge != s.iface.name:
                 stanzas.append(AutoStanza(s.iface.name))
                 stanzas.append(s)
             else:

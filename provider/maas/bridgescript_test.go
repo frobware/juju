@@ -44,14 +44,14 @@ func (s *bridgeConfigSuite) SetUpTest(c *gc.C) {
 	c.Assert(err, jc.ErrorIsNil)
 }
 
-func (s *bridgeConfigSuite) assertScript(c *gc.C, initialConfig, expectedConfig, bridgePrefix, bridgeName, interfaceName string) {
+func (s *bridgeConfigSuite) assertScript(c *gc.C, initialConfig, expectedConfig, bridgePrefix, bridgeName, interfaceToBridge string) {
 	// To simplify most cases, trim trailing new lines.
 	initialConfig = strings.TrimSuffix(initialConfig, "\n")
 	expectedConfig = strings.TrimSuffix(expectedConfig, "\n")
 	err := ioutil.WriteFile(s.testConfigPath, []byte(initialConfig), 0644)
 	c.Check(err, jc.ErrorIsNil)
 	// Run the script and verify the modified config.
-	output, retcode := s.runScript(c, s.testConfigPath, bridgePrefix, bridgeName, interfaceName)
+	output, retcode := s.runScript(c, s.testConfigPath, bridgePrefix, bridgeName, interfaceToBridge)
 	c.Check(retcode, gc.Equals, 0)
 	c.Check(strings.Trim(output, "\n"), gc.Equals, expectedConfig)
 }
@@ -134,33 +134,31 @@ func (s *bridgeConfigSuite) TestBridgeScriptMismatchedBridgeNameAndInterfaceArgs
 }
 
 func (s *bridgeConfigSuite) TestBridgeScriptInterfaceNameArgumentRequired(c *gc.C) {
-	output, code := s.runScript(c, "", "br-", "eth0", "")
+	output, code := s.runScript(c, "# no content", "", "juju-br0", "")
 	c.Check(code, gc.Equals, 1)
-	c.Check(strings.Trim(output, "\n"), gc.Equals, "error: --interface name required when using --bridge-name")
+	c.Check(strings.Trim(output, "\n"), gc.Equals, "error: --interface-to-bridge required when using --bridge-name")
 }
 
-func (s *bridgeConfigSuite) TestBridgeScriptInterfaceNameArgumentRequired(c *gc.C) {
-	output, code := s.runScript(c, "", "br-", "eth0", "")
+func (s *bridgeConfigSuite) TestBridgeScriptBridgeNameArgumentRequired(c *gc.C) {
+	output, code := s.runScript(c, "# no content", "", "", "eth0")
 	c.Check(code, gc.Equals, 1)
-	c.Check(strings.Trim(output, "\n"), gc.Equals, "error: --interface name required when using --bridge-name")
+	c.Check(strings.Trim(output, "\n"), gc.Equals, "error: --bridge-name required when using --interface-to-bridge")
 }
 
-func (s *bridgeConfigSuite) runScript(c *gc.C, configFile, bridgePrefix, bridgeName, interfaceName string) (output string, exitCode int) {
-	args := ""
-
+func (s *bridgeConfigSuite) runScript(c *gc.C, configFile, bridgePrefix, bridgeName, interfaceToBridge string) (output string, exitCode int) {
 	if bridgePrefix != "" {
-		args = fmt.Sprintf("--bridge-prefix=%q", bridgePrefix)
+		bridgePrefix = fmt.Sprintf("--bridge-prefix=%q", bridgePrefix)
 	}
 
 	if bridgeName != "" {
-		args = fmt.Sprintf("%s --bridge-name=%q", args, bridgePrefix)
+		bridgeName = fmt.Sprintf("--bridge-name=%q", bridgeName)
 	}
 
-	if interfaceName != "" {
-		args = fmt.Sprintf("%s --interface=%q", args, interfaceName)
+	if interfaceToBridge != "" {
+		interfaceToBridge = fmt.Sprintf("--interface-to-bridge=%q", interfaceToBridge)
 	}
 
-	script := fmt.Sprintf("%q %s %q\n", s.testPythonScript, args, configFile)
+	script := fmt.Sprintf("%q %s %s %s %q\n", s.testPythonScript, bridgePrefix, bridgeName, interfaceToBridge, configFile)
 	result, err := exec.RunCommands(exec.RunParams{Commands: script})
 	c.Assert(err, jc.ErrorIsNil, gc.Commentf("script failed unexpectedly"))
 	stdout := string(result.Stdout)
