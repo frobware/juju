@@ -133,31 +133,34 @@ func (s *bridgeConfigSuite) TestBridgeScriptMismatchedBridgeNameAndInterfaceArgs
 	s.assertScript(c, networkWithEmptyDNSValuesInitial, networkWithEmptyDNSValuesExpected, "br-", "", "")
 }
 
+func (s *bridgeConfigSuite) TestBridgeScriptInterfaceNameArgumentRequired(c *gc.C) {
+	output, code := s.runScript(c, "", "br-", "eth0", "")
+	c.Check(code, gc.Equals, 1)
+	c.Check(strings.Trim(output, "\n"), gc.Equals, "error: --interface name required when using --bridge-name")
+}
+
+func (s *bridgeConfigSuite) TestBridgeScriptInterfaceNameArgumentRequired(c *gc.C) {
+	output, code := s.runScript(c, "", "br-", "eth0", "")
+	c.Check(code, gc.Equals, 1)
+	c.Check(strings.Trim(output, "\n"), gc.Equals, "error: --interface name required when using --bridge-name")
+}
+
 func (s *bridgeConfigSuite) runScript(c *gc.C, configFile, bridgePrefix, bridgeName, interfaceName string) (output string, exitCode int) {
 	args := ""
 
 	if bridgePrefix != "" {
-		args = fmt.Sprintf("--bridge-prefix=%q",
-			bridgePrefix)
+		args = fmt.Sprintf("--bridge-prefix=%q", bridgePrefix)
 	}
 
 	if bridgeName != "" {
-		args = fmt.Sprintf("%s --bridge-name=%q",
-			args,
-			bridgePrefix)
+		args = fmt.Sprintf("%s --bridge-name=%q", args, bridgePrefix)
 	}
 
 	if interfaceName != "" {
-		args = fmt.Sprintf("%s --interface=%q",
-			args,
-			interfaceName)
+		args = fmt.Sprintf("%s --interface=%q", args, interfaceName)
 	}
 
-	script := fmt.Sprintf("%q %s %q\n",
-		s.testPythonScript,
-		args,
-		configFile)
-
+	script := fmt.Sprintf("%q %s %q\n", s.testPythonScript, args, configFile)
 	result, err := exec.RunCommands(exec.RunParams{Commands: script})
 	c.Assert(err, jc.ErrorIsNil, gc.Commentf("script failed unexpectedly"))
 	stdout := string(result.Stdout)
