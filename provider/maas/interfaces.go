@@ -205,15 +205,15 @@ func parseInterfacesForMAASObject(maasObject *gomaasapi.MAASObject) ([]maasInter
 // otherwise.
 func findPXEInterfaceSpace(interfaces []maasInterface, pxeMACAddress string) (string, error) {
 	for _, nic := range interfaces {
-		isPhysical := nic.Type == "physical"
-		sameMAC := nic.MACAddress == pxeMACAddress
-
-		if !isPhysical || !sameMAC {
+		if nic.MACAddress != pxeMACAddress || len(nic.Links) < 1 {
 			continue
 		}
-
+		isBond := nic.Type == "bond"
+		isPhysical := nic.Type == "physical"
 		logger.Debugf("PXE interface found as %q (%s)", nic.Name, nic.MACAddress)
-		return getPXEInterfaceSpace(&nic)
+		if isPhysical || (isBond && len(nic.Parents) > 0) {
+			return getPXEInterfaceSpace(&nic)
+		}
 	}
 
 	return "", errors.NotFoundf("PXE interface with MAC address %q", pxeMACAddress)

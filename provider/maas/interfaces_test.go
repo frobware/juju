@@ -264,10 +264,102 @@ const exampleInterfaceSetJSON = `
 		"type": "vlan",
 		"children": [],
 		"resource_uri": "/MAAS/api/1.0/nodes/node-18489434-9eb0-11e5-bdef-00163e40c3b6/interfaces/152/"
+	},
+	{
+		"name": "eth1",
+		"links": [],
+		"tags": [],
+		"vlan": {
+			"name": "untagged",
+			"vid": 0,
+			"mtu": 1500,
+			"fabric": "fabric-0",
+			"id": 0,
+			"resource_uri": "/MAAS/api/1.0/vlans/0/"
+		},
+		"enabled": true,
+		"id": 38,
+		"discovered": [],
+		"mac_address": "52:54:00:c6:17:82",
+		"parents": [],
+		"effective_mtu": 1500,
+		"params": "",
+		"type": "physical",
+		"children": [
+			"bond1"
+		],
+		"resource_uri": "/MAAS/api/1.0/nodes/node-770e97d0-9e69-11e5-9749-52540061e12f/interfaces/38/"
+	},
+	{
+		"name": "bond1",
+		"links": [
+		    {
+			"subnet": {
+			    "dns_servers": [
+				"10.17.20.200"
+			    ],
+			    "name": "10.17.20.0/24",
+			    "space": "default",
+			    "vlan": {
+				"name": "untagged",
+				"vid": 0,
+				"mtu": 1500,
+				"fabric": "fabric-0",
+				"id": 0,
+				"resource_uri": "/MAAS/api/1.0/vlans/0/"
+			    },
+			    "gateway_ip": "10.17.20.1",
+			    "cidr": "10.17.20.0/24",
+			    "id": 1,
+			    "resource_uri": "/MAAS/api/1.0/subnets/1/"
+			},
+			"ip_address": "10.17.20.210",
+			"id": 525,
+			"mode": "static"
+		    }
+		],
+		"tags": [],
+		"vlan": {
+		    "name": "untagged",
+		    "vid": 0,
+		    "mtu": 1500,
+		    "fabric": "fabric-0",
+		    "id": 0,
+		    "resource_uri": "/MAAS/api/1.0/vlans/0/"
+		},
+		"enabled": true,
+		"id": 186,
+		"discovered": [],
+		"mac_address": "52:54:00:c6:17:82",
+		"parents": [
+		    "eth1",
+		    "eth2"
+		],
+		"effective_mtu": 1500,
+		"params": {
+		    "bond_miimon": 100,
+		    "bond_downdelay": 0,
+		    "bond_mode": "active-backup",
+		    "bond_lacp_rate": "slow",
+		    "bond_xmit_hash_policy": "layer2",
+		    "bond_updelay": 0
+		},
+		"type": "bond",
+		"children": [],
+		"resource_uri": "/MAAS/api/1.0/nodes/node-770e97d0-9e69-11e5-9749-52540061e12f/interfaces/186/"
 	}
 ]`
 
 var (
+	exampleBondVLAN = maasVLAN{
+		ID:          0,
+		Name:        "untagged",
+		VID:         0,
+		MTU:         1500,
+		Fabric:      "fabric-0",
+		ResourceURI: "/MAAS/api/1.0/vlans/0/",
+	}
+
 	exampleVLAN0 = maasVLAN{
 		ID:          5001,
 		Name:        "untagged",
@@ -415,6 +507,44 @@ var (
 		Parents:     []string{"eth0"},
 		Children:    []string{},
 		ResourceURI: "/MAAS/api/1.0/nodes/node-18489434-9eb0-11e5-bdef-00163e40c3b6/interfaces/152/",
+	}, {
+		ID:          38,
+		Name:        "eth1",
+		Type:        "physical",
+		Enabled:     true,
+		MACAddress:  "52:54:00:c6:17:82",
+		VLAN:        exampleBondVLAN,
+		EffectveMTU: 1500,
+		Links:       []maasInterfaceLink{},
+		Parents:     []string{},
+		Children:    []string{"bond1"},
+		ResourceURI: "/MAAS/api/1.0/nodes/node-770e97d0-9e69-11e5-9749-52540061e12f/interfaces/38/",
+	}, {
+		ID:          186,
+		Name:        "bond1",
+		Type:        "bond",
+		Enabled:     true,
+		MACAddress:  "52:54:00:c6:17:82",
+		VLAN:        exampleBondVLAN,
+		EffectveMTU: 1500,
+		Links: []maasInterfaceLink{{
+			ID: 525,
+			Subnet: &maasSubnet{
+				ID:          1,
+				Name:        "10.17.20.0/24",
+				Space:       "default",
+				VLAN:        exampleBondVLAN,
+				GatewayIP:   "10.17.20.1",
+				DNSServers:  []string{"10.17.20.200"},
+				CIDR:        "10.17.20.0/24",
+				ResourceURI: "/MAAS/api/1.0/subnets/1/",
+			},
+			IPAddress: "10.17.20.210",
+			Mode:      "static",
+		}},
+		Parents:     []string{"eth1", "eth2"},
+		Children:    []string{},
+		ResourceURI: "/MAAS/api/1.0/nodes/node-770e97d0-9e69-11e5-9749-52540061e12f/interfaces/186/",
 	}}
 )
 
@@ -513,6 +643,12 @@ func (s *interfacesSuite) TestGetPXEMACAddressForMAASObject(c *gc.C) {
 
 func (s *interfacesSuite) TestFindPXEInterfaceSpaceSuccess(c *gc.C) {
 	foundSpace, err := findPXEInterfaceSpace(exampleInterfaces, "52:54:00:70:9b:fe")
+	c.Assert(err, jc.ErrorIsNil)
+	c.Assert(foundSpace, gc.Equals, "default")
+}
+
+func (s *interfacesSuite) TestFindPXEInterfaceSpaceSuccessOnBond(c *gc.C) {
+	foundSpace, err := findPXEInterfaceSpace(exampleInterfaces, "52:54:00:c6:17:82")
 	c.Assert(err, jc.ErrorIsNil)
 	c.Assert(foundSpace, gc.Equals, "default")
 }
@@ -693,6 +829,25 @@ func (s *interfacesSuite) TestMAASObjectNetworkInterfaces(c *gc.C) {
 		DNSSearch:         "",
 		MTU:               1500,
 		GatewayAddress:    network.NewAddressOnSpace("storage", "10.250.19.2"),
+		ExtraConfig:       nil,
+	}, {
+		DeviceIndex:       5,
+		MACAddress:        "52:54:00:c6:17:82",
+		CIDR:              "10.17.20.0/24",
+		NetworkName:       "juju-private",
+		ProviderId:        "186",
+		ProviderSubnetId:  "1",
+		AvailabilityZones: nil,
+		VLANTag:           0,
+		InterfaceName:     "bond1",
+		Disabled:          false,
+		NoAutoStart:       false,
+		ConfigType:        "static",
+		Address:           network.NewAddressOnSpace("default", "10.17.20.210"),
+		DNSServers:        network.NewAddressesOnSpace("default", "10.17.20.200"),
+		DNSSearch:         "",
+		MTU:               1500,
+		GatewayAddress:    network.NewAddressOnSpace("default", "10.17.20.1"),
 		ExtraConfig:       nil,
 	}}
 
