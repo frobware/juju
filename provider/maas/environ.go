@@ -897,7 +897,10 @@ func (environ *maasEnviron) StartInstance(args environs.StartInstanceParams) (
 		return nil, errors.Errorf("cannot run instances: %v", err)
 	}
 
-	inst := &maasInstance{selectedNode, environ}
+	inst := &maasInstance{
+		maasObject:   selectedNode,
+		statusGetter: environ.deploymentStatusOne,
+	}
 	defer func() {
 		if err != nil {
 			if err := environ.StopInstances(inst.Id()); err != nil {
@@ -1039,6 +1042,48 @@ func (environ *maasEnviron) waitForNodeDeployment(id instance.Id) error {
 	return errors.Errorf("instance %q is started but not deployed", id)
 }
 
+func (environ *maasEnviron) deploymentStatusOne(id instance.Id) (string, string) {
+	results, err := environ.deploymentStatus(id)
+	if err != nil {
+		return "", ""
+	}
+	systemId := extractSystemId(id)
+	substatus := environ.getDeploymentSubstatus(systemId)
+	return results[systemId], substatus
+}
+
+func (environ *maasEnviron) getDeploymentSubstatus(systemId string) string {
+	nodesAPI := environ.getMAASClient().GetSubObject("nodes")
+	result, err := nodesAPI.CallGet("list", nil)
+	if err != nil {
+		return ""
+	}
+	slices, err := result.GetArray()
+	if err != nil {
+		return ""
+	}
+	for _, slice := range slices {
+		resultMap, err := slice.GetMap()
+		if err != nil {
+			continue
+		}
+		sysId, err := resultMap["system_id"].GetString()
+		if err != nil {
+			continue
+		}
+		if sysId == systemId {
+			message, err := resultMap["substatus_message"].GetString()
+			if err != nil {
+				logger.Warningf("could not get string for substatus_message: %v", resultMap["substatus_message"])
+				return ""
+			}
+			return message
+		}
+	}
+
+	return ""
+}
+
 // deploymentStatus returns the deployment state of MAAS instances with
 // the specified Juju instance ids.
 // Note: the result is a map of MAAS systemId to state.
@@ -1139,13 +1184,24 @@ fi
 
 if [ ! -z "${juju_networking_preferred_python_binary:-}" ]; then
     if [ -f %[1]q ]; then
-        ${juju_networking_preferred_python_binary} %[1]q --bridge-prefix=%q --one-time-backup --activate %q
+# We are sharing this code between master, maas-spaces2 and 1.25.
+# For the moment we want master and 1.25 to not bridge all interfaces.
+# This setting allows us to easily switch the behaviour when merging
+# the code between those various branches.
+        juju_bridge_all_interfaces=1
+        if [ $juju_bridge_all_interfaces -eq 1 ]; then
+            $juju_networking_preferred_python_binary %[1]q --bridge-prefix=%[2]q --one-time-backup --activate %[4]q
+        else
+            juju_ipv4_interface_to_bridge=$(ip -4 route list exact default | head -n1 | cut -d' ' -f5)
+            $juju_networking_preferred_python_binary %[1]q --bridge-name=%[3]q --interface-to-bridge="${juju_ipv4_interface_to_bridge:-unknown}" --one-time-backup --activate %[4]q
+        fi
     fi
 else
     echo "error: no Python installation found; cannot run Juju's bridge script"
 fi`,
 		bridgeScriptPath,
 		instancecfg.DefaultBridgePrefix,
+		instancecfg.DefaultBridgeName,
 		"/etc/network/interfaces")
 }
 
@@ -1289,7 +1345,10 @@ func (environ *maasEnviron) instances(filter url.Values) ([]instance.Instance, e
 		if err != nil {
 			return nil, err
 		}
-		instances[index] = &maasInstance{&node, environ}
+		instances[index] = &maasInstance{
+			maasObject:   &node,
+			statusGetter: environ.deploymentStatusOne,
+		}
 	}
 	return instances, nil
 }
