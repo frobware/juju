@@ -330,3 +330,24 @@ func bridgeConfiguration(input string) (string, error) {
 	}
 	return input, nil
 }
+
+func isLXDBridgeConfigured(input string) bool {
+	var haveIPv4Address = false
+	var useLXDBridgeIsTrue = false
+	var haveLXDBridgeDevice = false
+
+	values := parseLXDBridgeConfigValues(input)
+
+	ipAddr := net.ParseIP(values["LXD_IPV4_ADDR"])
+	haveIPv4Address = ipAddr != nil && ipAddr.To4() != nil
+
+	if val, found := values["USE_LXD_BRIDGE"]; found {
+		useLXDBridgeIsTrue = val == "true"
+	}
+
+	if val, found := values["LXD_BRIDGE"]; found {
+		haveLXDBridgeDevice = len(val) > 0
+	}
+
+	return haveIPv4Address && useLXDBridgeIsTrue && haveLXDBridgeDevice
+}

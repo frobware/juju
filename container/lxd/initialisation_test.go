@@ -362,3 +362,71 @@ func (s *InitialiserSuite) TestBridgeConfigurationWithNewSubnet(c *gc.C) {
 	actualValues := parseLXDBridgeConfigValues(result)
 	c.Assert(expectedValues, gc.DeepEquals, actualValues)
 }
+
+func (s *InitialiserSuite) TestIsBridgeConfigured(c *gc.C) {
+	for i, test := range []struct {
+		desc     string
+		content  string
+		expected bool
+	}{{
+		desc:     "All missing",
+		content:  "",
+		expected: false,
+	}, {
+		desc: "missing USE_LXD_BRIDGE and LXD_BRIDGE",
+		content: `
+LXD_IPV4_ADDR=10.20.30.1`,
+		expected: false,
+	}, {
+		desc: "missing LXD_BRIDGE missing",
+		content: `
+LXD_IPV4_ADDR=10.20.30.1
+USE_LXD_BRIDGE=true`,
+		expected: false,
+	}, {
+		desc: "bad IPv4 address",
+		content: `
+LXD_IPV4_ADDR="::1"
+USE_LXD_BRIDGE="true"
+LXD_BRIDGE="lxdbr0"`,
+		expected: false,
+	}, {
+		desc: "USE_LXD_BRIDGE value != true",
+		content: `
+LXD_IPV4_ADDR="10.20.30.1"
+USE_LXD_BRIDGE="nope"
+LXD_BRIDGE="lxdbr0"`,
+		expected: false,
+	}, {
+		desc: "USE_LXD_BRIDGE value not set",
+		content: `
+LXD_IPV4_ADDR="10.20.30.1"
+USE_LXD_BRIDGE="
+LXD_BRIDGE="lxdbr0"`,
+		expected: false,
+	}, {
+		desc: "LXD_BRIDGE value not set",
+		content: `
+LXD_IPV4_ADDR="10.20.30.1"
+USE_LXD_BRIDGE=true"
+LXD_BRIDGE=""`,
+		expected: false,
+	}, {
+		desc: "USE_LXD_BRIDGE, LXD_BRIDGE present, LXD_IPV4_ADDR missing",
+		content: `
+USE_LXD_BRIDGE=true"
+LXD_BRIDGE=""`,
+		expected: false,
+	}, {
+		desc: "All good",
+		content: `
+LXD_IPV4_ADDR="10.20.30.1"
+USE_LXD_BRIDGE="true"
+LXD_BRIDGE="lxdbr0"`,
+		expected: true,
+	}} {
+		c.Logf("test #%d - %s", i, test.desc)
+		result := isLXDBridgeConfigured(test.content)
+		c.Check(result, gc.Equals, test.expected)
+	}
+}
