@@ -95,40 +95,38 @@ var configureZFS = func() {
 }
 
 var configureLXDBridge = func() error {
-	f, err := os.OpenFile(lxdBridgeFile, os.O_RDWR, 0777)
-	if err != nil {
-		/* We're using an old version of LXD which doesn't have
-		 * lxd-bridge; let's not fail here.
-		 */
-		if os.IsNotExist(err) {
-			logger.Warningf("couldn't find %s, not configuring it", lxdBridgeFile)
-			return nil
-		}
-		return errors.Trace(err)
-	}
-	defer f.Close()
+	isBridgeConfigured, err := isLXDBridgeFileConfigured(lxdBridgeFile)
 
-	existing, err := ioutil.ReadAll(f)
 	if err != nil {
-		return errors.Trace(err)
+		return errors.Annotatef(err, "failed to read LXD configuration from %s", lxdBridgeFile)
 	}
 
-	newBridgeCfg, err := bridgeConfiguration(string(existing))
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	if newBridgeCfg == string(existing) {
+	if isBridgeConfigured {
+		logger.Infof("LXD bridge configuration is complete")
 		return nil
 	}
 
-	_, err = f.Seek(0, 0)
+	cmd := "dpkg-reconfigure"
+	cmdArgs := []string{"--frontend", "noninteractive", "--priority", "med", "lxd"}
+
+	logger.Warningf("Running %s to setup LXD bridge configuration: ", cmd, strings.Join(cmdArgs, " "))
+
+	output, err := exec.Command(cmd, cmdArgs...).CombinedOutput()
+
 	if err != nil {
-		return errors.Trace(err)
+		logger.Errorf("%s %q failed with %s: %q", cmd, strings.Join(cmdArgs, " "), err, string(output))
+		return nil
 	}
-	_, err = f.WriteString(newBridgeCfg)
+
+	isBridgeConfigured, err = isLXDBridgeFileConfigured(lxdBridgeFile)
+
 	if err != nil {
-		return errors.Trace(err)
+		return errors.Annotatef(err, "failed to read LXD configuration from %s", lxdBridgeFile)
+	}
+
+	if !isBridgeConfigured {
+		msg := fmt.Sprintf("LXD bridge configuration incomplete post %s %q", cmd, strings.Join(cmdArgs, " "))
+		return errors.New(msg)
 	}
 
 	/* non-systemd systems don't have the lxd-bridge service, so this always fails */
@@ -338,8 +336,10 @@ func isLXDBridgeConfigured(input string) bool {
 
 	values := parseLXDBridgeConfigValues(input)
 
-	ipAddr := net.ParseIP(values["LXD_IPV4_ADDR"])
-	haveIPv4Address = ipAddr != nil && ipAddr.To4() != nil
+	if val, found := values["LXD_IPV4_ADDR"]; found {
+		ipAddr := net.ParseIP(val)
+		haveIPv4Address = ipAddr != nil && ipAddr.To4() != nil
+	}
 
 	if val, found := values["USE_LXD_BRIDGE"]; found {
 		useLXDBridgeIsTrue = val == "true"
@@ -350,4 +350,32 @@ func isLXDBridgeConfigured(input string) bool {
 	}
 
 	return haveIPv4Address && useLXDBridgeIsTrue && haveLXDBridgeDevice
+}
+
+func isLXDBridgeFileConfigured(filename string) (bool, error) {
+	content, err := readBridgeConfiguration(filename)
+
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+
+	return isLXDBridgeConfigured(content), nil
+}
+
+func readBridgeConfiguration(filename string) (string, error) {
+	f, err := os.OpenFile(filename, os.O_RDONLY, 0777)
+
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+
+	defer f.Close()
+
+	content, err := ioutil.ReadAll(f)
+
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+
+	return string(content), nil
 }
