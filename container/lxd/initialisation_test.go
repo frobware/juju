@@ -6,10 +6,6 @@
 package lxd
 
 import (
-	"errors"
-	"fmt"
-	"net"
-
 	jc "github.com/juju/testing/checkers"
 	"github.com/juju/utils/packaging/commands"
 	"github.com/juju/utils/packaging/manager"
@@ -113,128 +109,6 @@ func (s *InitialiserSuite) TestNoSeriesPackages(c *gc.C) {
 	})
 }
 
-func (s *InitialiserSuite) TestFindAvailableSubnetWithInterfaceAddrsError(c *gc.C) {
-	s.PatchValue(&interfaceAddrs, func() ([]net.Addr, error) {
-		return nil, errors.New("boom!")
-	})
-	subnet, err := findNextAvailableIPv4Subnet()
-	c.Assert(err, gc.ErrorMatches, "cannot get network interface addresses: boom!")
-	c.Assert(subnet, gc.Equals, "")
-}
-
-type testFindSubnetAddr struct {
-	val string
-}
-
-func (a testFindSubnetAddr) Network() string {
-	return "ip+net"
-}
-
-func (a testFindSubnetAddr) String() string {
-	return a.val
-}
-
-func testAddresses(c *gc.C, networks ...string) ([]net.Addr, error) {
-	addrs := make([]net.Addr, 0)
-	for _, n := range networks {
-		_, _, err := net.ParseCIDR(n)
-		if err != nil {
-			return nil, err
-		}
-		c.Assert(err, gc.IsNil)
-		addrs = append(addrs, testFindSubnetAddr{n})
-	}
-	return addrs, nil
-}
-
-func (s *InitialiserSuite) TestFindAvailableSubnetWithNoAddresses(c *gc.C) {
-	s.PatchValue(&interfaceAddrs, func() ([]net.Addr, error) {
-		return testAddresses(c)
-	})
-	subnet, err := findNextAvailableIPv4Subnet()
-	c.Assert(err, gc.IsNil)
-	c.Assert(subnet, gc.Equals, "0")
-}
-
-func (s *InitialiserSuite) TestFindAvailableSubnetWithIPv6Only(c *gc.C) {
-	s.PatchValue(&interfaceAddrs, func() ([]net.Addr, error) {
-		return testAddresses(c, "fe80::aa8e:a275:7ae0:34af/64")
-	})
-	subnet, err := findNextAvailableIPv4Subnet()
-	c.Assert(err, gc.IsNil)
-	c.Assert(subnet, gc.Equals, "0")
-}
-
-func (s *InitialiserSuite) TestFindAvailableSubnetWithIPv4OnlyAndNo10xSubnet(c *gc.C) {
-	s.PatchValue(&interfaceAddrs, func() ([]net.Addr, error) {
-		return testAddresses(c, "192.168.1.64/24")
-	})
-	subnet, err := findNextAvailableIPv4Subnet()
-	c.Assert(err, gc.IsNil)
-	c.Assert(subnet, gc.Equals, "0")
-}
-
-func (s *InitialiserSuite) TestFindAvailableSubnetWithInvalidCIDR(c *gc.C) {
-	s.PatchValue(&interfaceAddrs, func() ([]net.Addr, error) {
-		return []net.Addr{
-			testFindSubnetAddr{"10.0.0.1"},
-			testFindSubnetAddr{"10.0.5.1/24"}}, nil
-	})
-	subnet, err := findNextAvailableIPv4Subnet()
-	c.Assert(err, gc.IsNil)
-	c.Assert(subnet, gc.Equals, "6")
-}
-
-func (s *InitialiserSuite) TestFindAvailableSubnetWithIPv4AndExisting10xNetwork(c *gc.C) {
-	s.PatchValue(&interfaceAddrs, func() ([]net.Addr, error) {
-		return testAddresses(c, "192.168.1.64/24", "10.0.0.1/24")
-	})
-	subnet, err := findNextAvailableIPv4Subnet()
-	c.Assert(err, gc.IsNil)
-	c.Assert(subnet, gc.Equals, "1")
-}
-
-func (s *InitialiserSuite) TestFindAvailableSubnetWithExisting10xNetworks(c *gc.C) {
-	s.PatchValue(&interfaceAddrs, func() ([]net.Addr, error) {
-		return testAddresses(c, "192.168.1.0/24", "10.0.4.1/24", "::1/128", "10.0.3.1/24", "fe80::aa8e:a275:7ae0:34af/64")
-	})
-	subnet, err := findNextAvailableIPv4Subnet()
-	c.Assert(err, gc.IsNil)
-	c.Assert(subnet, gc.Equals, "5")
-}
-
-func (s *InitialiserSuite) TestFindAvailableSubnetUpperBoundInUse(c *gc.C) {
-	s.PatchValue(&interfaceAddrs, func() ([]net.Addr, error) {
-		return testAddresses(c, "10.0.255.1/24")
-	})
-	subnet, err := findNextAvailableIPv4Subnet()
-	c.Assert(err, gc.IsNil)
-	c.Assert(subnet, gc.Equals, "0")
-}
-
-func (s *InitialiserSuite) TestFindAvailableSubnetUpperBoundAndLowerBoundInUse(c *gc.C) {
-	s.PatchValue(&interfaceAddrs, func() ([]net.Addr, error) {
-		return testAddresses(c, "10.0.255.1/24", "10.0.0.1/24")
-	})
-	subnet, err := findNextAvailableIPv4Subnet()
-	c.Assert(err, gc.IsNil)
-	c.Assert(subnet, gc.Equals, "1")
-}
-
-func (s *InitialiserSuite) TestFindAvailableSubnetWithFull10xSubnet(c *gc.C) {
-	s.PatchValue(&interfaceAddrs, func() ([]net.Addr, error) {
-		addrs := make([]net.Addr, 256)
-		for i := 0; i < 256; i++ {
-			subnet := fmt.Sprintf("10.0.%v.1/24", i)
-			addrs[i] = testFindSubnetAddr{subnet}
-		}
-		return addrs, nil
-	})
-	subnet, err := findNextAvailableIPv4Subnet()
-	c.Assert(err, gc.ErrorMatches, "could not find unused subnet")
-	c.Assert(subnet, gc.Equals, "")
-}
-
 func (s *InitialiserSuite) TestParseLXDBridgeFileValues(c *gc.C) {
 	insignificantContent := `
 # Comment 1, followed by empty line.
@@ -322,45 +196,6 @@ func (s *InitialiserSuite) TestParseLXDBridgeFileValuesWithRealWorldContent(c *g
 	}
 	values := parseLXDBridgeConfigValues(lxdBridgeContent)
 	c.Check(values, gc.DeepEquals, expected)
-}
-
-func (s *InitialiserSuite) TestBridgeConfigurationWithNoChangeRequired(c *gc.C) {
-	result, err := bridgeConfiguration(lxdBridgeContent)
-	c.Assert(err, gc.IsNil)
-	c.Assert(lxdBridgeContent, gc.Equals, result)
-}
-
-func (s *InitialiserSuite) TestBridgeConfigurationWithInterfacesError(c *gc.C) {
-	s.PatchValue(&interfaceAddrs, func() ([]net.Addr, error) {
-		return nil, errors.New("boom!")
-	})
-	result, err := bridgeConfiguration("")
-	c.Assert(err, gc.ErrorMatches, "cannot get network interface addresses: boom!")
-	c.Assert(result, gc.Equals, "")
-}
-
-func (s *InitialiserSuite) TestBridgeConfigurationWithNewSubnet(c *gc.C) {
-	s.PatchValue(&interfaceAddrs, func() ([]net.Addr, error) {
-		return testAddresses(c, "10.0.4.1/24")
-	})
-
-	expectedValues := map[string]string{
-		"USE_LXD_BRIDGE":      "true",
-		"EXISTING_BRIDGE":     "",
-		"LXD_BRIDGE":          "lxdbr0",
-		"LXD_IPV4_ADDR":       "10.0.5.1",
-		"LXD_IPV4_NETMASK":    "255.255.255.0",
-		"LXD_IPV4_NETWORK":    "10.0.5.1/24",
-		"LXD_IPV4_DHCP_RANGE": "10.0.5.2,10.0.5.254",
-		"LXD_IPV4_DHCP_MAX":   "253",
-		"LXD_IPV4_NAT":        "true",
-		"LXD_IPV6_PROXY":      "false",
-	}
-
-	result, err := bridgeConfiguration(`LXD_IPV4_ADDR=""`)
-	c.Assert(err, gc.IsNil)
-	actualValues := parseLXDBridgeConfigValues(result)
-	c.Assert(expectedValues, gc.DeepEquals, actualValues)
 }
 
 func (s *InitialiserSuite) TestIsBridgeConfigured(c *gc.C) {

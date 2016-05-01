@@ -6,7 +6,6 @@
 package lxd
 
 import (
-	"bytes"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -138,51 +137,6 @@ var interfaceAddrs = func() ([]net.Addr, error) {
 	return net.InterfaceAddrs()
 }
 
-func editLXDBridgeFile(input string, subnet string) string {
-	buffer := bytes.Buffer{}
-
-	newValues := map[string]string{
-		"USE_LXD_BRIDGE":      "true",
-		"EXISTING_BRIDGE":     "",
-		"LXD_BRIDGE":          "lxdbr0",
-		"LXD_IPV4_ADDR":       fmt.Sprintf("10.0.%s.1", subnet),
-		"LXD_IPV4_NETMASK":    "255.255.255.0",
-		"LXD_IPV4_NETWORK":    fmt.Sprintf("10.0.%s.1/24", subnet),
-		"LXD_IPV4_DHCP_RANGE": fmt.Sprintf("10.0.%s.2,10.0.%s.254", subnet, subnet),
-		"LXD_IPV4_DHCP_MAX":   "253",
-		"LXD_IPV4_NAT":        "true",
-		"LXD_IPV6_PROXY":      "false",
-	}
-	found := map[string]bool{}
-
-	for _, line := range strings.Split(input, "\n") {
-		out := line
-
-		for prefix, value := range newValues {
-			if strings.HasPrefix(line, prefix+"=") {
-				out = fmt.Sprintf(`%s="%s"`, prefix, value)
-				found[prefix] = true
-				break
-			}
-		}
-
-		buffer.WriteString(out)
-		buffer.WriteString("\n")
-	}
-
-	for prefix, value := range newValues {
-		if !found[prefix] {
-			buffer.WriteString(prefix)
-			buffer.WriteString("=")
-			buffer.WriteString(value)
-			buffer.WriteString("\n")
-			found[prefix] = true // not necessary but keeps "found" logically consistent
-		}
-	}
-
-	return buffer.String()
-}
-
 // ensureDependencies creates a set of install packages using
 // apt.GetPreparePackages and runs each set of packages through
 // apt.GetInstall.
@@ -225,61 +179,6 @@ func ensureDependencies(series string) error {
 	return err
 }
 
-// findNextAvailableIPv4Subnet scans the list of interfaces on the machine
-// looking for 10.0.0.0/16 networks and returns the next subnet not in
-// use, having first detected the highest subnet. The next subnet can
-// actually be lower if we overflowed 255 whilst seeking out the next
-// unused subnet. If all subnets are in use an error is returned.
-//
-// TODO(frobware): this is not an ideal solution as it doesn't take
-// into account any static routes that may be set up on the machine.
-//
-// TODO(frobware): this only caters for IPv4 setups.
-func findNextAvailableIPv4Subnet() (string, error) {
-	_, ip10network, err := net.ParseCIDR("10.0.0.0/16")
-	if err != nil {
-		return "", errors.Trace(err)
-	}
-
-	addrs, err := interfaceAddrs()
-	if err != nil {
-		return "", errors.Annotatef(err, "cannot get network interface addresses")
-	}
-
-	max := 0
-	usedSubnets := make(map[int]bool)
-
-	for _, address := range addrs {
-		addr, network, err := net.ParseCIDR(address.String())
-		if err != nil {
-			logger.Warningf("cannot parse address %q: %v (ignoring)", address.String(), err)
-			continue
-		}
-		if !ip10network.Contains(addr) {
-			logger.Debugf("find available subnet, skipping %q", network.String())
-			continue
-		}
-		subnet := int(network.IP[2])
-		usedSubnets[subnet] = true
-		if subnet > max {
-			max = subnet
-		}
-	}
-
-	if len(usedSubnets) == 0 {
-		return "0", nil
-	}
-
-	for i := 0; i < 256; i++ {
-		max = (max + 1) % 256
-		if _, inUse := usedSubnets[max]; !inUse {
-			return fmt.Sprintf("%d", max), nil
-		}
-	}
-
-	return "", errors.New("could not find unused subnet")
-}
-
 func parseLXDBridgeConfigValues(input string) map[string]string {
 	values := make(map[string]string)
 
@@ -308,25 +207,6 @@ func parseLXDBridgeConfigValues(input string) map[string]string {
 		values[tokens[0]] = value
 	}
 	return values
-}
-
-// bridgeConfiguration ensures that input has a valid setting for
-// LXD_IPV4_ADDR, returning the existing input if is already set, and
-// allocating the next available subnet if it is not.
-func bridgeConfiguration(input string) (string, error) {
-	values := parseLXDBridgeConfigValues(input)
-	ipAddr := net.ParseIP(values["LXD_IPV4_ADDR"])
-
-	if ipAddr == nil || ipAddr.To4() == nil {
-		logger.Infof("LXD_IPV4_ADDR is not set; searching for unused subnet")
-		subnet, err := findNextAvailableIPv4Subnet()
-		if err != nil {
-			return "", errors.Trace(err)
-		}
-		logger.Infof("setting LXD_IPV4_ADDR=10.0.%s.1", subnet)
-		return editLXDBridgeFile(input, subnet), nil
-	}
-	return input, nil
 }
 
 func isLXDBridgeConfigured(input string) bool {
