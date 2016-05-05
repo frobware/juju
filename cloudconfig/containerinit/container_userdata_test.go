@@ -74,27 +74,16 @@ auto eth0
 iface eth0 inet manual
   dns-nameservers ns1.invalid ns2.invalid
   dns-search foo bar
-  pre-up ip address add 0.1.2.3/24 dev eth0 || true
-  up ip route replace 0.1.2.0/24 dev eth0 || true
-  down ip route del 0.1.2.0/24 dev eth0 || true
-  post-down address del 0.1.2.3/24 dev eth0 || true
-  up ip route replace default via 0.1.2.1 || true
-  down ip route del default via 0.1.2.1 || true
+  address 0.1.2.3/24
+  gateway 0.1.2.1
 
 auto eth1
 iface eth1 inet manual
   dns-nameservers ns1.invalid ns2.invalid
   dns-search foo bar
-  pre-up ip address add 0.1.2.4/24 dev eth1 || true
-  up ip route replace 0.1.2.0/24 dev eth1 || true
-  down ip route del 0.1.2.0/24 dev eth1 || true
-  post-down address del 0.1.2.4/24 dev eth1 || true
+  address 0.1.2.4/24
 
 iface eth2 inet manual
-  pre-up ip address add  dev eth2 || true
-  up ip route replace  dev eth2 || true
-  down ip route del  dev eth2 || true
-  post-down address del  dev eth2 || true
 
 `
 	s.PatchValue(containerinit.NetworkInterfacesFile, s.networkInterfacesFile)

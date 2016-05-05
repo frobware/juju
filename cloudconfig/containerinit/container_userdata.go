@@ -5,12 +5,10 @@
 package containerinit
 
 import (
-	"bytes"
 	"fmt"
 	"io/ioutil"
 	"path/filepath"
 	"strings"
-	"text/template"
 
 	"github.com/juju/errors"
 	"github.com/juju/loggo"
@@ -21,7 +19,6 @@ import (
 	"github.com/juju/juju/cloudconfig/instancecfg"
 	"github.com/juju/juju/container"
 	"github.com/juju/juju/environs"
-	"github.com/juju/juju/network"
 	"github.com/juju/juju/service"
 	"github.com/juju/juju/service/common"
 )
@@ -58,50 +55,50 @@ func WriteCloudInitFile(directory string, userData []byte) (string, error) {
 	return userDataFilename, nil
 }
 
-// networkConfigTemplate defines how to render /etc/network/interfaces
-// file for a container with one or more NICs.
-const networkConfigTemplate = `
-# loopback interface
-auto lo
-iface lo inet loopback{{define "static"}}
-{{.InterfaceName | printf "# interface %q"}}{{if not .NoAutoStart}}
-auto {{.InterfaceName}}{{end}}
-iface {{.InterfaceName}} inet manual{{if gt (len .DNSServers) 0}}
-    dns-nameservers{{range $dns := .DNSServers}} {{$dns.Value}}{{end}}{{end}}{{if gt (len .DNSSearch) 0}}
-    dns-search {{.DNSSearch}}{{end}}
-    pre-up ip address add {{.Address.Value}}/32 dev {{.InterfaceName}} &> /dev/null || true
-    up ip route replace {{.GatewayAddress.Value}} dev {{.InterfaceName}}
-    up ip route replace default via {{.GatewayAddress.Value}}
-    down ip route del default via {{.GatewayAddress.Value}} &> /dev/null || true
-    down ip route del {{.GatewayAddress.Value}} dev {{.InterfaceName}} &> /dev/null || true
-    post-down ip address del {{.Address.Value}}/32 dev {{.InterfaceName}} &> /dev/null || true
-{{end}}{{define "dhcp"}}
-{{.InterfaceName | printf "# interface %q"}}{{if not .NoAutoStart}}
-auto {{.InterfaceName}}{{end}}
-iface {{.InterfaceName}} inet dhcp
-{{end}}{{range $nic := . }}{{if eq $nic.ConfigType "static"}}
-{{template "static" $nic}}{{else}}{{template "dhcp" $nic}}{{end}}{{end}}`
-
-// multiBridgeNetworkConfigTemplate defines how to render /etc/network/interfaces
-// file for a multi-NIC container.
-const multiBridgeNetworkConfigTemplate = `
-auto lo
-iface lo inet loopback
-{{range $nic := .}}{{template "single" $nic}}{{end}}
-{{define "single"}}{{if not .NoAutoStart}}
-auto {{.InterfaceName}}{{end}}
-iface {{.InterfaceName}} inet manual{{if .DNSServers}}
-  dns-nameservers{{range $srv := .DNSServers}} {{$srv.Value}}{{end}}{{end}}{{if .DNSSearchDomains}}
-  dns-search{{range $dom := .DNSSearchDomains}} {{$dom}}{{end}}{{end}}
-  pre-up ip address add {{.CIDRAddress}} dev {{.InterfaceName}} || true
-  up ip route replace {{.CIDR}} dev {{.InterfaceName}} || true
-  down ip route del {{.CIDR}} dev {{.InterfaceName}} || true
-  post-down address del {{.CIDRAddress}} dev {{.InterfaceName}} || true{{if .GatewayAddress.Value}}
-  up ip route replace default via {{.GatewayAddress.Value}} || true
-  down ip route del default via {{.GatewayAddress.Value}} || true{{end}}
-{{end}}`
-
 var networkInterfacesFile = "/etc/network/interfaces.d/00-juju.cfg"
+
+func networkConfig2networkInterfacesFile(networkConfig container.NetworkConfig) string {
+	s := "\nauto lo\niface lo inet loopback\n\n"
+
+	for i, v := range networkConfig.Interfaces {
+		if v.Address.Value != "" {
+			s += "auto " + v.InterfaceName + "\n"
+		}
+
+		s += "iface " + v.InterfaceName + " inet " + "manual" + "\n"
+
+		if len(v.DNSServers) > 0 {
+			s += "  dns-nameservers "
+			for i, name := range v.DNSServers {
+				s += name.Value
+				if i+1 < len(v.DNSServers) {
+					s += " "
+				}
+			}
+			s += "\n"
+		}
+		if len(v.DNSSearchDomains) > 0 {
+			s += "  dns-search "
+			for i, name := range v.DNSSearchDomains {
+				s += name
+				if i+1 < len(v.DNSSearchDomains) {
+					s += " "
+				}
+			}
+			s += "\n"
+		}
+		if v.CIDRAddress() != "" {
+			s += "  address " + v.CIDRAddress() + "\n"
+		}
+		if i == 0 && v.GatewayAddress.Value != "" {
+			s += "  gateway " + v.GatewayAddress.Value + "\n"
+		}
+		if i+1 < len(networkConfig.Interfaces) {
+			s += "\n"
+		}
+	}
+	return s + "\n"
+}
 
 // GenerateNetworkConfig renders a network config for one or more
 // network interfaces, using the given non-nil networkConfig
@@ -112,34 +109,10 @@ func GenerateNetworkConfig(networkConfig *container.NetworkConfig) (string, erro
 		logger.Tracef("no network config to generate")
 		return "", nil
 	}
+
 	logger.Debugf("generating network config from %#v", *networkConfig)
-
-	// Copy the InterfaceInfo before modifying the original.
-	interfacesCopy := make([]network.InterfaceInfo, len(networkConfig.Interfaces))
-	copy(interfacesCopy, networkConfig.Interfaces)
-	for i, info := range interfacesCopy {
-		if info.MACAddress != "" {
-			info.MACAddress = ""
-		}
-		if info.InterfaceName != "eth0" {
-			info.GatewayAddress = network.Address{}
-		}
-		interfacesCopy[i] = info
-	}
-
-	// Render the config first.
-	tmpl, err := template.New("config").Parse(multiBridgeNetworkConfigTemplate)
-	if err != nil {
-		return "", errors.Annotate(err, "cannot parse network config template")
-	}
-
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, interfacesCopy); err != nil {
-		return "", errors.Annotate(err, "cannot render network config")
-	}
-
-	generatedConfig := buf.String()
-	logger.Debugf("generated network config from %#v\nusing%#v:\n%s", interfacesCopy, networkConfig.Interfaces, generatedConfig)
+	generatedConfig := networkConfig2networkInterfacesFile(*networkConfig)
+	logger.Debugf("generated network config from %#v:\n%s", networkConfig.Interfaces, generatedConfig)
 
 	return generatedConfig, nil
 }
