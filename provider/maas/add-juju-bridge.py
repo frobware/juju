@@ -348,7 +348,7 @@ def shell_cmd(s):
     return [out, err, p.returncode]
 
 
-def print_shell_cmd(s, verbose=True, exit_on_error=False):
+def print_shell_cmd(s, verbose=True, exit_on_error=True):
     if verbose:
         print(s)
     out, err, retcode = shell_cmd(s)
