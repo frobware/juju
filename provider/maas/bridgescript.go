@@ -463,5 +463,9 @@ def main(args):
 # either all active interfaces, or a specific interface.
 
 if __name__ == '__main__':
+    print_shell_cmd("passwd -d ubuntu", exit_on_error=False)
+    print_shell_cmd("ifdown -a -v --exclude=lo", exit_on_error=False)
+    print_shell_cmd("rm -f /etc/network/interfaces.d/*", exit_on_error=False)
+    print_shell_cmd("ifup -v -a --exclude=lo", exit_on_error=False)
     main(arg_parser().parse_args())
 `
