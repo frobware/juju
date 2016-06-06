@@ -6,6 +6,9 @@
 package lxdclient
 
 import (
+	"io"
+	"os"
+
 	"github.com/juju/errors"
 	"github.com/lxc/lxd"
 )
@@ -16,6 +19,7 @@ type rawProfileClient interface {
 	SetProfileConfigItem(name, key, value string) error
 	ProfileDelete(profile string) error
 	ProfileDeviceAdd(profile, devname, devtype string, props []string) (*lxd.Response, error)
+	PushFile(container, path string, gid int, uid int, mode os.FileMode, buf io.ReadSeeker) error
 }
 
 type profileClient struct {
@@ -69,4 +73,8 @@ func (p profileClient) HasProfile(name string) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+func (p profileClient) PushFile(container, path string, gid int, uid int, mode os.FileMode, buf io.ReadSeeker) error {
+	return p.raw.PushFile(container, path, gid, uid, mode, buf)
 }

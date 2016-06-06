@@ -84,7 +84,7 @@ var configureZFS = func() {
 		"lxd",
 		"init",
 		"--auto",
-		"--storage-backend", "zfs",
+		"--storage-backend", "dir",
 		"--storage-pool", "lxd",
 		"--storage-create-loop", "100",
 	).CombinedOutput()

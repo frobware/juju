@@ -158,9 +158,13 @@ func newCloudInitConfigWithNetworks(series string, networkConfig *container.Netw
 		return cloudConfig, errors.Trace(err)
 	}
 
+	cloudConfig.AddBootTextFile("/etc/cloud/cloud.cfg.d/99-juju-no-cloud-init-networking.cfg", "network: {config: disabled}", 0644)
+
+	cloudConfig.AddBootTextFile(networkInterfaces50CloudInitFile, "# content removed by Juju", 0644)
 	cloudConfig.AddBootTextFile(networkInterfacesFile, config, 0644)
-	cloudConfig.AddRunCmd("ifup -a || true")
-	cloudConfig.AddRunCmd(fmt.Sprintf("test -f '%s' && rm -f '%s'", networkInterfacesFile, networkInterfaces50CloudInitFile))
+	// cloudConfig.AddRunCmd("ifconfig -a")
+	// cloudConfig.AddRunCmd("ifup -a || true")
+	// cloudConfig.AddRunCmd(fmt.Sprintf("test -f '%s' && rm -f '%s'", networkInterfacesFile, networkInterfaces50CloudInitFile))
 	return cloudConfig, nil
 }
 

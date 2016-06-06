@@ -242,6 +242,7 @@ func (gi Instance) CurrentStatus(client *Client) (string, error) {
 // Metadata returns the user-specified metadata for the instance.
 func (gi Instance) Metadata() map[string]string {
 	// TODO*ericsnow) return a copy?
+	logger.Criticalf("XXXXXXXXXX: %#v\n", gi.InstanceSummary.Metadata)
 	return gi.InstanceSummary.Metadata
 }
 
