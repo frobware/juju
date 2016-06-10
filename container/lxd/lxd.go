@@ -152,12 +152,26 @@ func (manager *containerManager) CreateContainer(
 		logger.Infof("instance %q configured with %v network devices", name, nics)
 	}
 
+	files := lxdclient.Files{
+		lxdclient.File{
+			Content: []byte("# Content removed by Juju.\n"),
+			Path:    "/etc/network/interfaces.d/50-cloud-init.cfg",
+			Mode:    0644,
+		},
+		lxdclient.File{
+			Content: []byte("network: {config: disabled}\n"),
+			Path:    "/etc/cloud/cloud.cfg.d/99-juju-no-cloud-init-networking.cfg",
+			Mode:    0644,
+		},
+	}
+
 	spec := lxdclient.InstanceSpec{
 		Name:     name,
 		Image:    manager.client.ImageNameForSeries(series),
 		Metadata: metadata,
 		Devices:  nics,
 		Profiles: profiles,
+		Files:    files,
 	}
 
 	logger.Infof("starting instance %q (image %q)...", spec.Name, spec.Image)
