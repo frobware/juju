@@ -25,6 +25,14 @@ var (
 	logger = loggo.GetLogger("juju.container.lxd")
 )
 
+type interfaceArity int
+
+const (
+	noNIC interfaceArity = iota
+	singleNIC
+	multiNIC
+)
+
 const lxdDefaultProfileName = "default"
 
 // XXX: should we allow managing containers on other hosts? this is
@@ -138,38 +146,50 @@ func (manager *containerManager) CreateContainer(
 		"boot.autostart": "true",
 	}
 
-	nics, err := networkDevices(networkConfig)
+	profiles := []string{}
+	files := make(lxdclient.Files, 0)
+	devices := make(lxdclient.Devices)
+	interfaceArity := networkConfiguration(networkConfig)
+
+	if interfaceArity == noNIC {
+		err = errors.Annotatef(err, "no network configuration")
+		return
+	}
+
+	devices, err = networkDevices(networkConfig)
+
 	if err != nil {
 		return
 	}
 
-	profiles := []string{}
-
-	if len(nics) == 0 {
-		logger.Infof("instance %q configured with %q profile", name, lxdDefaultProfileName)
-		profiles = append(profiles, lxdDefaultProfileName)
-	} else {
-		logger.Infof("instance %q configured with %v network devices", name, nics)
+	switch interfaceArity {
+	case multiNIC:
+		files = append(files,
+			lxdclient.File{
+				Content: []byte("# Content removed by Juju.\n"),
+				Path:    "/etc/network/interfaces.d/50-cloud-init.cfg",
+				Mode:    0644,
+			},
+			lxdclient.File{
+				Content: []byte("# Content removed by Juju.\n"),
+				Path:    "/etc/network/interfaces.d/eth0.cfg",
+				Mode:    0644,
+			},
+			lxdclient.File{
+				Content: []byte("network: {config: disabled}\n"),
+				Path:    "/etc/cloud/cloud.cfg.d/99-juju-no-cloud-init-networking.cfg",
+				Mode:    0644,
+			},
+		)
 	}
 
-	files := lxdclient.Files{
-		lxdclient.File{
-			Content: []byte("# Content removed by Juju.\n"),
-			Path:    "/etc/network/interfaces.d/50-cloud-init.cfg",
-			Mode:    0644,
-		},
-		lxdclient.File{
-			Content: []byte("network: {config: disabled}\n"),
-			Path:    "/etc/cloud/cloud.cfg.d/99-juju-no-cloud-init-networking.cfg",
-			Mode:    0644,
-		},
-	}
+	logger.Infof("instance %q configured with %v network devices", name, devices)
 
 	spec := lxdclient.InstanceSpec{
 		Name:     name,
 		Image:    manager.client.ImageNameForSeries(series),
 		Metadata: metadata,
-		Devices:  nics,
+		Devices:  devices,
 		Profiles: profiles,
 		Files:    files,
 	}
@@ -266,7 +286,8 @@ func nicDevice(deviceName, parentDevice, hwAddr string, mtu int) (lxdclient.Devi
 func networkDevices(networkConfig *container.NetworkConfig) (lxdclient.Devices, error) {
 	nics := make(lxdclient.Devices)
 
-	if len(networkConfig.Interfaces) > 0 {
+	switch networkConfiguration(networkConfig) {
+	case multiNIC:
 		for _, v := range networkConfig.Interfaces {
 			if v.InterfaceType == network.LoopbackInterface {
 				continue
@@ -287,13 +308,23 @@ func networkDevices(networkConfig *container.NetworkConfig) (lxdclient.Devices, 
 			}
 			nics[v.InterfaceName] = device
 		}
-	} else if networkConfig.Device != "" {
+	case singleNIC:
 		device, err := nicDevice("eth0", networkConfig.Device, "", networkConfig.MTU)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 		nics["eth0"] = device
 	}
-
 	return nics, nil
+}
+
+func networkConfiguration(networkConfig *container.NetworkConfig) interfaceArity {
+	switch {
+	case len(networkConfig.Interfaces) > 0:
+		return multiNIC
+	case networkConfig.Device != "":
+		return singleNIC
+	default:
+		return noNIC
+	}
 }
