@@ -195,7 +195,7 @@ func (env *environ) newRawInstance(args environs.StartInstanceParams) (*lxdclien
 	if args.StatusCallback != nil {
 		args.StatusCallback(status.StatusAllocating, "starting instance", nil)
 	}
-	inst, err := env.raw.AddInstance(instSpec)
+	inst, err := env.raw.AddInstance(instSpec, nil)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

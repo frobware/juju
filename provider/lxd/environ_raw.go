@@ -23,7 +23,7 @@ type rawProvider struct {
 
 type lxdInstances interface {
 	Instances(string, ...string) ([]lxdclient.Instance, error)
-	AddInstance(lxdclient.InstanceSpec) (*lxdclient.Instance, error)
+	AddInstance(lxdclient.InstanceSpec, lxdclient.InstanceInitialisedHook) (*lxdclient.Instance, error)
 	RemoveInstances(string, ...string) error
 	Addresses(string) ([]network.Address, error)
 }

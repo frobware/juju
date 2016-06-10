@@ -176,7 +176,7 @@ func (manager *containerManager) CreateContainer(
 
 	logger.Infof("starting instance %q (image %q)...", spec.Name, spec.Image)
 	callback(status.StatusProvisioning, "Starting container", nil)
-	_, err = manager.client.AddInstance(spec)
+	_, err = manager.client.AddInstance(spec, nil)
 	if err != nil {
 		return
 	}

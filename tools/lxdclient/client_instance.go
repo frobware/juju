@@ -19,6 +19,8 @@ import (
 	"github.com/juju/juju/network"
 )
 
+type InstanceInitialisedHook func(spec InstanceSpec) error
+
 type Device map[string]string
 type Devices map[string]Device
 
@@ -52,7 +54,7 @@ type instanceClient struct {
 	remote string
 }
 
-func (client *instanceClient) addInstance(spec InstanceSpec) error {
+func (client *instanceClient) addInstance(spec InstanceSpec, initHook InstanceInitialisedHook) error {
 	imageRemote := spec.ImageRemote
 	if imageRemote == "" {
 		imageRemote = client.remote
@@ -80,6 +82,10 @@ func (client *instanceClient) addInstance(spec InstanceSpec) error {
 		// TODO(ericsnow) Handle different failures (from the async
 		// operation) differently?
 		return errors.Trace(err)
+	}
+
+	if initHook != nil {
+		return initHook(spec)
 	}
 
 	return nil
@@ -113,8 +119,8 @@ func (client *instanceClient) startInstance(spec InstanceSpec) error {
 
 // AddInstance creates a new instance based on the spec's data and
 // returns it. The instance will be created using the client.
-func (client *instanceClient) AddInstance(spec InstanceSpec) (*Instance, error) {
-	if err := client.addInstance(spec); err != nil {
+func (client *instanceClient) AddInstance(spec InstanceSpec, initHook InstanceInitialisedHook) (*Instance, error) {
+	if err := client.addInstance(spec, initHook); err != nil {
 		return nil, errors.Trace(err)
 	}
 

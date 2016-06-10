@@ -63,7 +63,7 @@ func (t *LxdSuite) TestNotAllContainersAreDeleted(c *gc.C) {
 		Image: "ubuntu-xenial",
 	}
 
-	_, err = lxdClient.AddInstance(instanceSpec)
+	_, err = lxdClient.AddInstance(instanceSpec, nil)
 	c.Assert(err, jc.ErrorIsNil)
 	defer lxdClient.RemoveInstances("", "juju-lxd-tests")
 
