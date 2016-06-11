@@ -166,6 +166,11 @@ func (manager *containerManager) CreateContainer(
 	case multiNIC:
 		files = append(files,
 			lxdclient.File{
+				Content: []byte("auto lo\niface lo inet loopback\n"),
+				Path:    "/etc/network/interfaces",
+				Mode:    0644,
+			},
+			lxdclient.File{
 				Content: []byte("# Content removed by Juju.\n"),
 				Path:    "/etc/network/interfaces.d/50-cloud-init.cfg",
 				Mode:    0644,
