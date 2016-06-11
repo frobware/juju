@@ -151,7 +151,7 @@ func (manager *containerManager) CreateContainer(
 	devices := make(lxdclient.Devices)
 	interfaceArity := networkConfiguration(networkConfig)
 
-	if interfaceArity == noNIC {
+	if interfaceArity == noNIC || interfaceArity == singleNIC {
 		err = errors.Annotatef(err, "no network configuration")
 		return
 	}
