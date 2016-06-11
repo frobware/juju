@@ -7,6 +7,7 @@ package lxd
 
 import (
 	"fmt"
+	"os/exec"
 
 	"github.com/juju/errors"
 	"github.com/juju/loggo"
@@ -201,7 +202,16 @@ func (manager *containerManager) CreateContainer(
 
 	logger.Infof("starting instance %q (image %q)...", spec.Name, spec.Image)
 	callback(status.StatusProvisioning, "Starting container", nil)
-	_, err = manager.client.AddInstance(spec, nil)
+
+	_, err = manager.client.AddInstance(spec, func(spec lxdclient.InstanceSpec) error {
+		switch interfaceArity {
+		case multiNIC:
+			return applyPatchForLP1590104(spec)
+		default:
+			return nil
+		}
+	})
+
 	if err != nil {
 		return
 	}
@@ -332,4 +342,36 @@ func networkConfiguration(networkConfig *container.NetworkConfig) interfaceArity
 	default:
 		return noNIC
 	}
+}
+
+func applyPatchForLP1590104(spec lxdclient.InstanceSpec) error {
+	script := `set -eux
+if [ $(lsb_release -cs) == "xenial" ]; then
+  name="$1"
+  local_f=$(mktemp)
+  trap "rm -f $local_f $local_f.dist" EXIT
+  f="/usr/lib/python3/dist-packages/cloudinit/stages.py"
+  line="for loc, ncfg in (cmdline_cfg, dscfg, sys_cfg)"
+  lxc file pull "$name/$f" "$local_f"
+# If patch is unsuccessful then it may have landed in cloud-init.
+  sed -i.dist "/$line/s/dscfg, sys_cfg/sys_cfg, dscfg/" "$local_f" || exit 0
+  diff -u "$local_f.dist" "$local_f" && { echo "patch failed"; exit 1; }
+  lxc file push "$local_f" "$name/$f"
+fi
+`
+	out, err := exec.Command("sudo",
+		"/bin/bash",
+		"-c",
+		script,
+		"--",
+		spec.Name,
+	).CombinedOutput()
+
+	if err != nil {
+		logger.Infof("Failed to fix LP1590104: %q", string(out))
+	} else {
+		logger.Infof("Successfully fixed LP1590104: %q", string(out))
+	}
+
+	return err
 }
