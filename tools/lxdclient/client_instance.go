@@ -25,7 +25,7 @@ type Devices map[string]Device
 type rawInstanceClient interface {
 	ListContainers() ([]shared.ContainerInfo, error)
 	ContainerInfo(name string) (*shared.ContainerInfo, error)
-	Init(name string, imgremote string, image string, profiles *[]string, config map[string]string, devices shared.Devices, ephem bool) (*lxd.Response, error)
+	Init(name string, imgremote string, image string, profiles *[]string, config map[string]string, ephem bool) (*lxd.Response, error)
 	Action(name string, action shared.ContainerAction, timeout int, force bool, stateful bool) (*lxd.Response, error)
 	Delete(name string) (*lxd.Response, error)
 
@@ -54,7 +54,7 @@ func (client *instanceClient) addInstance(spec InstanceSpec) error {
 	// TODO(ericsnow) Copy the image first?
 
 	config := spec.config()
-	resp, err := client.raw.Init(spec.Name, imageRemote, imageAlias, profiles, config, copyDevices(spec.Devices), spec.Ephemeral)
+	resp, err := client.raw.Init(spec.Name, imageRemote, imageAlias, profiles, config, spec.Ephemeral)
 	if err != nil {
 		return errors.Trace(err)
 	}
