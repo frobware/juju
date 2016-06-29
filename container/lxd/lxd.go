@@ -36,6 +36,8 @@ type containerManager struct {
 	namespace instance.Namespace
 	// A cached client.
 	client *lxdclient.Client
+	// Custom network profile
+	networkProfile string
 }
 
 // containerManager implements container.Manager.
@@ -96,6 +98,7 @@ func (manager *containerManager) CreateContainer(
 
 	defer func() {
 		if err != nil {
+			manager.deleteNetworkProfile()
 			callback(status.StatusProvisioningError, fmt.Sprintf("Creating container: %v", err), nil)
 		}
 	}()
@@ -149,6 +152,11 @@ func (manager *containerManager) CreateContainer(
 		logger.Infof("instance %q configured with %q profile", name, lxdDefaultProfileName)
 		profiles = append(profiles, lxdDefaultProfileName)
 	} else {
+		manager.networkProfile = fmt.Sprintf("%s-network", name)
+		if err = createNetworkProfile(manager.client, manager.networkProfile, nics); err != nil {
+			return
+		}
+		profiles = append(profiles, manager.networkProfile)
 		logger.Infof("instance %q configured with %v network devices", name, nics)
 	}
 
@@ -156,7 +164,6 @@ func (manager *containerManager) CreateContainer(
 		Name:     name,
 		Image:    manager.client.ImageNameForSeries(series),
 		Metadata: metadata,
-		Devices:  nics,
 		Profiles: profiles,
 	}
 
@@ -164,6 +171,7 @@ func (manager *containerManager) CreateContainer(
 	callback(status.StatusProvisioning, "Starting container", nil)
 	_, err = manager.client.AddInstance(spec)
 	if err != nil {
+		manager.deleteNetworkProfile()
 		return
 	}
 
@@ -180,6 +188,7 @@ func (manager *containerManager) DestroyContainer(id instance.Id) error {
 			return err
 		}
 	}
+	manager.deleteNetworkProfile()
 	return errors.Trace(manager.client.RemoveInstances(manager.namespace.Prefix(), string(id)))
 }
 
@@ -276,4 +285,56 @@ func networkDevices(networkConfig *container.NetworkConfig) (lxdclient.Devices, 
 	}
 
 	return nics, nil
+}
+
+func nicDeviceProperties(nic lxdclient.Device) []string {
+	var props = []string{}
+
+	for k, v := range nic {
+		props = append(props, fmt.Sprintf("%s=%s", k, v))
+	}
+
+	return props
+}
+
+func createNetworkProfile(client *lxdclient.Client, profile string, nics lxdclient.Devices) error {
+	found, err := client.HasProfile(profile)
+
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	if found {
+		logger.Infof("deleting existing container profile %q", profile)
+		if err := client.ProfileDelete(profile); err != nil {
+			return errors.Trace(err)
+		}
+	}
+
+	err = client.CreateProfile(profile, nil)
+
+	if err == nil {
+		logger.Infof("created new network container profile %q", profile)
+	}
+
+	for deviceName, device := range nics {
+		props := nicDeviceProperties(device)
+		logger.Infof("adding nic device %q with properties %+v to profile %q", deviceName, props, profile)
+		_, err := client.ProfileDeviceAdd(profile, deviceName, "nic", props)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+
+	return errors.Trace(err)
+}
+
+func (manager *containerManager) deleteNetworkProfile() {
+	if manager.client != nil && manager.networkProfile != "" {
+		logger.Infof("deleting container network profile %q", manager.networkProfile)
+		if err := manager.client.ProfileDelete(manager.networkProfile); err != nil {
+			logger.Warningf("discarding profile delete error: %v", err)
+		}
+		manager.networkProfile = ""
+	}
 }
