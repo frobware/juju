@@ -99,8 +99,9 @@ class LogicalInterface(object):
 
     def _bridge_vlan(self, prefix, bridge_name, add_auto_stanza):
         stanzas = []
-        s1 = IfaceStanza(self.name, self.family, "manual", self.options)
-        stanzas.append(s1)
+        if add_auto_stanza:
+            stanzas.append(AutoStanza(self.name))
+        stanzas.append(IfaceStanza(self.name, self.family, "manual", self.options))
         if add_auto_stanza:
             stanzas.append(AutoStanza(bridge_name))
         options = [x for x in self.options if not x.startswith("vlan")]

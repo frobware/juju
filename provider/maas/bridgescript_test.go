@@ -757,6 +757,7 @@ auto eth1
 iface eth1 inet manual
     mtu 1500
 
+auto eth0.2
 iface eth0.2 inet manual
     address 192.168.2.3/24
     vlan-raw-device eth0
@@ -769,6 +770,7 @@ iface vlan-br-eth0.2 inet static
     mtu 1500
     bridge_ports eth0.2
 
+auto eth1.3
 iface eth1.3 inet manual
     address 192.168.3.3/24
     vlan-raw-device eth1
@@ -861,6 +863,7 @@ auto eth3
 iface eth3 inet manual
     mtu 1500
 
+auto eth1.2667
 iface eth1.2667 inet manual
     address 10.245.184.2/24
     vlan-raw-device eth1
@@ -875,6 +878,7 @@ iface br-eth1.2667 inet static
     bridge_ports eth1.2667
     dns-nameservers 10.245.168.2
 
+auto eth1.2668
 iface eth1.2668 inet manual
     address 10.245.185.1/24
     vlan-raw-device eth1
@@ -889,6 +893,7 @@ iface br-eth1.2668 inet static
     bridge_ports eth1.2668
     dns-nameservers 10.245.168.2
 
+auto eth1.2669
 iface eth1.2669 inet manual
     address 10.245.186.1/24
     vlan-raw-device eth1
@@ -903,6 +908,7 @@ iface br-eth1.2669 inet static
     bridge_ports eth1.2669
     dns-nameservers 10.245.168.2
 
+auto eth1.2670
 iface eth1.2670 inet manual
     address 10.245.187.2/24
     vlan-raw-device eth1
@@ -1013,6 +1019,7 @@ iface br-bond0 inet static
     bridge_ports bond0
     dns-nameservers 10.17.20.200
 
+auto bond0.2
 iface bond0.2 inet manual
     address 192.168.2.102/24
     vlan-raw-device bond0
@@ -1025,6 +1032,7 @@ iface br-bond0.2 inet static
     mtu 1500
     bridge_ports bond0.2
 
+auto bond0.3
 iface bond0.3 inet manual
     address 192.168.3.101/24
     vlan-raw-device bond0
@@ -1076,6 +1084,7 @@ auto eth1
 iface eth1 inet manual
     mtu 1500
 
+auto eth1.2
 iface eth1.2 inet manual
     vlan-raw-device eth1
     mtu 1500
@@ -1128,6 +1137,7 @@ iface br-eth1 inet dhcp
     mtu 1500
     bridge_ports eth1
 
+auto eth1.2
 iface eth1.2 inet manual
     vlan-raw-device eth1
     mtu 1500
