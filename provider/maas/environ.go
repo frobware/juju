@@ -1324,54 +1324,11 @@ func (environ *maasEnviron) selectNode2(args selectNodeArgs) (maasInstance, erro
 // to run in order to prepare the Juju-specific networking config on a
 // node during cloud-init.
 func bridgeScriptWrapperForCloudInit(bridgeScriptPath string, interfacesToBridge []string) string {
-	// For ubuntu series < xenial we prefer python2 over python3
-	// as we don't want to invalidate lots of testing against
-	// known cloud-image contents. A summary of Ubuntu releases
-	// and python inclusion in the default install of Ubuntu
-	// Server is as follows:
-	//
-	// 12.04 precise:  python 2 (2.7.3)
-	// 14.04 trusty:   python 2 (2.7.5) and python3 (3.4.0)
-	// 14.10 utopic:   python 2 (2.7.8) and python3 (3.4.2)
-	// 15.04 vivid:    python 2 (2.7.9) and python3 (3.4.3)
-	// 15.10 wily:     python 2 (2.7.9) and python3 (3.4.3)
-	// 16.04 xenial:   python 3 only (3.5.1)
-	//
-	// going forward:  python 3 only
-
-	return fmt.Sprintf(`
-if [ -x /usr/bin/python2 ]; then
-    juju_networking_preferred_python_binary=/usr/bin/python2
-elif [ -x /usr/bin/python3 ]; then
-    juju_networking_preferred_python_binary=/usr/bin/python3
-elif [ -x /usr/bin/python ]; then
-    juju_networking_preferred_python_binary=/usr/bin/python
-fi
-
-if [ ! -z "${juju_networking_preferred_python_binary:-}" ]; then
-    if [ -f %[1]q ]; then
-# We are sharing this code between 2.0 and 1.25.
-# For the moment we want 2.0 to bridge all interfaces linked
-# to a subnet, while for 1.25 we only bridge the default route interface.
-# This setting allows us to easily switch the behaviour when merging
-# the code between those various branches.
-        juju_bridge_linked_interfaces=1
-        if [ $juju_bridge_linked_interfaces -eq 1 ]; then
-            $juju_networking_preferred_python_binary %[1]q --bridge-prefix=%[2]q --interfaces-to-bridge=%[5]q --one-time-backup --activate %[4]q
-        else
-            juju_ipv4_interface_to_bridge=$(ip -4 route list exact default | head -n1 | cut -d' ' -f5)
-            $juju_networking_preferred_python_binary %[1]q --bridge-name=%[3]q --interfaces-to-bridge="${juju_ipv4_interface_to_bridge:-unknown}" --one-time-backup --activate %[4]q
-        fi
-    fi
-else
-    echo "error: no Python installation found; cannot run Juju's bridge script"
-fi`,
-		bridgeScriptPath,
+	return fmt.Sprintf("DEBUG=1 IFUPDOWN_VERBOSE=-v BRIDGE_PREFIX=%q %q %q %s",
 		instancecfg.DefaultBridgePrefix,
-		instancecfg.DefaultBridgeName,
+		bridgeScriptPath,
 		"/etc/network/interfaces",
-		strings.Join(interfacesToBridge, " "),
-	)
+		strings.Join(interfacesToBridge, " "))
 }
 
 // newCloudinitConfig creates a cloudinit.Config structure suitable as a base
@@ -1396,6 +1353,7 @@ func (environ *maasEnviron) newCloudinitConfig(hostname, forSeries string, inter
 	case os.Windows:
 		cloudcfg.AddScripts(runCmd)
 	case os.Ubuntu:
+		cloudcfg.SetAttr("manage_etc_hosts", true)
 		cloudcfg.SetSystemUpdate(true)
 		cloudcfg.AddScripts("set -xe", runCmd)
 		// DisableNetworkManagement can still disable the bridge(s) creation.
@@ -1407,14 +1365,22 @@ func (environ *maasEnviron) newCloudinitConfig(hostname, forSeries string, inter
 			break
 		}
 
-		bridgeScriptPath, err := bridgeScriptPathForSeries(forSeries)
+		bridgeScriptPythonPath, err := bridgeScriptPathForSeries(forSeries, bridgeScriptPythonFilename)
+
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+
+		bridgeScriptShellPath, err := bridgeScriptPathForSeries(forSeries, bridgeScriptBashFilename)
+
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 
 		cloudcfg.AddPackage("bridge-utils")
-		cloudcfg.AddBootTextFile(bridgeScriptPath, bridgeScriptPython, 0755)
-		cloudcfg.AddScripts(bridgeScriptWrapperForCloudInit(bridgeScriptPath, interfacesToBridge))
+		cloudcfg.AddBootTextFile(bridgeScriptPythonPath, bridgeScriptPythonContent, 0644)
+		cloudcfg.AddBootTextFile(bridgeScriptShellPath, bridgeScriptBashContent, 0755)
+		cloudcfg.AddScripts(bridgeScriptWrapperForCloudInit(bridgeScriptShellPath, interfacesToBridge))
 	}
 	return cloudcfg, nil
 }
@@ -2418,10 +2384,10 @@ func (env *maasEnviron) releaseContainerAddresses2(macAddresses []string) error 
 	return nil
 }
 
-func bridgeScriptPathForSeries(series string) (string, error) {
+func bridgeScriptPathForSeries(series, filename string) (string, error) {
 	dataDir, err := paths.DataDir(series)
 	if err != nil {
 		return "", err
 	}
-	return path.Join(dataDir, bridgeScriptName), nil
+	return path.Join(dataDir, filename), nil
 }

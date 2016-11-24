@@ -21,10 +21,13 @@ import (
 type bridgeConfigSuite struct {
 	coretesting.BaseSuite
 
-	testConfig       string
-	testConfigPath   string
-	testPythonScript string
-	pythonVersions   []string
+	testBaseDir              string
+	testConfig               string
+	testConfigPath           string
+	testPythonScript         string
+	testBashScript           string
+	testBashScriptNewENIPath string
+	pythonVersions           []string
 }
 
 var _ = gc.Suite(&bridgeConfigSuite{})
@@ -49,17 +52,23 @@ func (s *bridgeConfigSuite) SetUpSuite(c *gc.C) {
 func (s *bridgeConfigSuite) SetUpTest(c *gc.C) {
 	// We need at least one Python package installed.
 	c.Assert(s.pythonVersions, gc.Not(gc.HasLen), 0)
-
-	s.testConfigPath = filepath.Join(c.MkDir(), "network-config")
-	s.testPythonScript = filepath.Join(c.MkDir(), bridgeScriptName)
+	s.testBaseDir = c.MkDir()
+	s.testConfigPath = filepath.Join(s.testBaseDir, "network-config")
+	s.testPythonScript = filepath.Join(s.testBaseDir, bridgeScriptPythonFilename)
+	s.testBashScript = filepath.Join(s.testBaseDir, bridgeScriptBashFilename)
+	s.testBashScriptNewENIPath = filepath.Join(s.testBaseDir, "new-network-config")
 	s.testConfig = "# test network config\n"
 	err := ioutil.WriteFile(s.testConfigPath, []byte(s.testConfig), 0644)
 	c.Assert(err, jc.ErrorIsNil)
-	err = ioutil.WriteFile(s.testPythonScript, []byte(bridgeScriptPython), 0644)
+	err = ioutil.WriteFile(s.testPythonScript, []byte(bridgeScriptPythonContent), 0644)
+	c.Assert(err, jc.ErrorIsNil)
+	err = ioutil.WriteFile(s.testBashScript, []byte(bridgeScriptBashContent), 0755)
+	c.Assert(err, jc.ErrorIsNil)
+	err = ioutil.WriteFile(s.testBashScriptNewENIPath, []byte(""), 0644)
 	c.Assert(err, jc.ErrorIsNil)
 }
 
-func (s *bridgeConfigSuite) assertScript(c *gc.C, initialConfig, expectedConfig, bridgePrefix, bridgeName, interfaceToBridge string) {
+func (s *bridgeConfigSuite) assertPythonScript(c *gc.C, initialConfig, expectedConfig, bridgePrefix, bridgeName, interfaceToBridge string) {
 	for i, python := range s.pythonVersions {
 		c.Logf("test #%v using %s", i, python)
 		// To simplify most cases, trim trailing new lines.
@@ -67,33 +76,33 @@ func (s *bridgeConfigSuite) assertScript(c *gc.C, initialConfig, expectedConfig,
 		err := ioutil.WriteFile(s.testConfigPath, []byte(strings.TrimSuffix(initialConfig, "\n")), 0644)
 		c.Check(err, jc.ErrorIsNil)
 		// Run the script and verify the modified config.
-		output, retcode := s.runScript(c, python, s.testConfigPath, bridgePrefix, bridgeName, interfaceToBridge)
+		output, retcode := s.runPythonScript(c, python, s.testConfigPath, bridgePrefix, bridgeName, interfaceToBridge)
 		c.Check(retcode, gc.Equals, 0)
 		c.Check(strings.Trim(output, "\n"), gc.Equals, expectedConfig, gc.Commentf("initial was:\n%s", initialConfig))
 	}
 }
 
-func (s *bridgeConfigSuite) assertScriptWithPrefix(c *gc.C, initial, expected, prefix, interfaceToBridge string) {
-	s.assertScript(c, initial, expected, prefix, "", interfaceToBridge)
+func (s *bridgeConfigSuite) assertPythonScriptWithPrefix(c *gc.C, initial, expected, prefix, interfaceToBridge string) {
+	s.assertPythonScript(c, initial, expected, prefix, "", interfaceToBridge)
 }
 
-func (s *bridgeConfigSuite) assertScriptWithDefaultPrefix(c *gc.C, initial, expected, interfaceToBridge string) {
-	s.assertScript(c, initial, expected, "", "", interfaceToBridge)
+func (s *bridgeConfigSuite) assertPythonScriptWithDefaultPrefix(c *gc.C, initial, expected, interfaceToBridge string) {
+	s.assertPythonScript(c, initial, expected, "", "", interfaceToBridge)
 }
 
-func (s *bridgeConfigSuite) assertScriptWithoutPrefix(c *gc.C, initial, expected, bridgeName, interfaceToBridge string) {
-	s.assertScript(c, initial, expected, "", bridgeName, interfaceToBridge)
+func (s *bridgeConfigSuite) assertPythonScriptWithoutPrefix(c *gc.C, initial, expected, bridgeName, interfaceToBridge string) {
+	s.assertPythonScript(c, initial, expected, "", bridgeName, interfaceToBridge)
 }
 
-func (s *bridgeConfigSuite) TestBridgeScriptWithUndefinedArgs(c *gc.C) {
+func (s *bridgeConfigSuite) TestPythonScriptWithUndefinedArgs(c *gc.C) {
 	for i, python := range s.pythonVersions {
 		c.Logf("test #%v using %s", i, python)
-		_, code := s.runScript(c, python, "", "", "", "")
+		_, code := s.runPythonScript(c, python, "", "", "", "")
 		c.Check(code, gc.Equals, 2)
 	}
 }
 
-func (s *bridgeConfigSuite) TestBridgeScriptWithPrefixTransformation(c *gc.C) {
+func (s *bridgeConfigSuite) TestPythonScriptWithPrefixTransformation(c *gc.C) {
 	for i, v := range []struct {
 		interfaceToBridge string
 		initial           string
@@ -112,13 +121,13 @@ func (s *bridgeConfigSuite) TestBridgeScriptWithPrefixTransformation(c *gc.C) {
 		{networkWithAliasInterfacesToBridge, networkWithAliasInitial, networkWithAliasExpected, "test-br-"},
 	} {
 		c.Logf("test #%v - expected transformation", i)
-		s.assertScriptWithPrefix(c, v.initial, v.expected, v.prefix, v.interfaceToBridge)
+		s.assertPythonScriptWithPrefix(c, v.initial, v.expected, v.prefix, v.interfaceToBridge)
 		c.Logf("test #%v - idempotent transformation", i)
-		s.assertScriptWithPrefix(c, v.expected, v.expected, v.prefix, v.interfaceToBridge)
+		s.assertPythonScriptWithPrefix(c, v.expected, v.expected, v.prefix, v.interfaceToBridge)
 	}
 }
 
-func (s *bridgeConfigSuite) TestBridgeScriptWithDefaultPrefixTransformation(c *gc.C) {
+func (s *bridgeConfigSuite) TestPythonScriptWithDefaultPrefixTransformation(c *gc.C) {
 	for i, v := range []struct {
 		interfaceToBridge string
 		initial           string
@@ -134,33 +143,30 @@ func (s *bridgeConfigSuite) TestBridgeScriptWithDefaultPrefixTransformation(c *g
 		{networkPartiallyBridgedInterfacesToBridge, networkPartiallyBridgedInitial, networkPartiallyBridgedExpected},
 	} {
 		c.Logf("test #%v - expected transformation", i)
-		s.assertScriptWithDefaultPrefix(c, v.initial, v.expected, v.interfaceToBridge)
+		s.assertPythonScriptWithDefaultPrefix(c, v.initial, v.expected, v.interfaceToBridge)
 		c.Logf("test #%v - idempotent transformation", i)
-		s.assertScriptWithDefaultPrefix(c, v.expected, v.expected, v.interfaceToBridge)
+		s.assertPythonScriptWithDefaultPrefix(c, v.expected, v.expected, v.interfaceToBridge)
 	}
 }
 
-func (s *bridgeConfigSuite) TestBridgeScriptInterfaceNameArgumentRequired(c *gc.C) {
+func (s *bridgeConfigSuite) TestPythonScriptInterfaceNameArgumentRequired(c *gc.C) {
 	for i, python := range s.pythonVersions {
 		c.Logf("test #%v using %s", i, python)
-		output, code := s.runScript(c, python, "# no content", "", "juju-br0", "")
+		output, code := s.runPythonScript(c, python, "", "", "juju-br0", "")
 		c.Check(code, gc.Equals, 2)
-		// We match very lazily here to isolate ourselves from
-		// the different formatting of argparse error messages
-		// that has occured between Python 2 and Python 3.
-		c.Check(strings.Trim(output, "\n"), gc.Matches, "(\n|.)*error:.*--interfaces-to-bridge.*")
+		c.Check(strings.Trim(output, "\n"), gc.Matches, "(\n|.)*error: no interfaces specified")
 	}
 }
 
-func (s *bridgeConfigSuite) TestBridgeScriptMatchingExistingSpecificIfaceButMissingAutoStanza(c *gc.C) {
-	s.assertScriptWithoutPrefix(c, networkWithExistingSpecificIfaceInitial, networkWithExistingSpecificIfaceExpected, "juju-br0", "eth1")
+func (s *bridgeConfigSuite) TestPythonScriptMatchingExistingSpecificIfaceButMissingAutoStanza(c *gc.C) {
+	s.assertPythonScriptWithoutPrefix(c, networkWithExistingSpecificIfaceInitial, networkWithExistingSpecificIfaceExpected, "juju-br0", "eth1")
 }
 
-func (s *bridgeConfigSuite) TestBridgeScriptMatchingExistingSpecificIface2(c *gc.C) {
-	s.assertScriptWithoutPrefix(c, networkLP1532167Initial, networkLP1532167Expected, "juju-br0", "bond0")
+func (s *bridgeConfigSuite) TestPythonScriptMatchingExistingSpecificIface2(c *gc.C) {
+	s.assertPythonScriptWithoutPrefix(c, networkLP1532167Initial, networkLP1532167Expected, "juju-br0", "bond0")
 }
 
-func (s *bridgeConfigSuite) runScript(c *gc.C, pythonBinary, configFile, bridgePrefix, bridgeName, interfaceToBridge string) (output string, exitCode int) {
+func (s *bridgeConfigSuite) runPythonScript(c *gc.C, pythonBinary, configFile, bridgePrefix, bridgeName, interfaceToBridge string) (output string, exitCode int) {
 	if bridgePrefix != "" {
 		bridgePrefix = fmt.Sprintf("--bridge-prefix=%q", bridgePrefix)
 	}
@@ -169,11 +175,9 @@ func (s *bridgeConfigSuite) runScript(c *gc.C, pythonBinary, configFile, bridgeP
 		bridgeName = fmt.Sprintf("--bridge-name=%q", bridgeName)
 	}
 
-	if interfaceToBridge != "" {
-		interfaceToBridge = fmt.Sprintf("--interfaces-to-bridge=%q", interfaceToBridge)
-	}
-
-	script := fmt.Sprintf("%q %q %s %s %s %q\n", pythonBinary, s.testPythonScript, bridgePrefix, bridgeName, interfaceToBridge, configFile)
+	script := fmt.Sprintf("%q %q %s %s %q %s\n",
+		pythonBinary, s.testPythonScript,
+		bridgeName, bridgePrefix, configFile, interfaceToBridge)
 	c.Log(script)
 	result, err := exec.RunCommands(exec.RunParams{Commands: script})
 	c.Assert(err, jc.ErrorIsNil, gc.Commentf("script failed unexpectedly"))
@@ -183,6 +187,114 @@ func (s *bridgeConfigSuite) runScript(c *gc.C, pythonBinary, configFile, bridgeP
 		return stdout + "\n" + stderr, result.Code
 	}
 	return stdout, result.Code
+}
+
+func (s *bridgeConfigSuite) assertBashScript(c *gc.C, bondSleepDuration int, python, initialConfig string, expected []string, bridgePrefix string, interfacesToBridge []string) {
+	err := ioutil.WriteFile(s.testConfigPath, []byte(strings.TrimSuffix(initialConfig, "\n")), 0644)
+	c.Check(err, jc.ErrorIsNil)
+	// Run the script and verify the bash commands that would be run
+	output, retcode := s.runBashScript(c, bondSleepDuration, python, bridgePrefix, interfacesToBridge)
+	c.Check(retcode, gc.Equals, 0)
+	c.Check(len(output), gc.Equals, len(expected))
+	c.Check(output, gc.DeepEquals, expected)
+}
+
+func (s *bridgeConfigSuite) bashScriptExpectedOutputHelper(isBonded bool, bondSleepDuration int, bridgePrefix string, interfacesToBridge []string) map[string][]string {
+	interfaces := strings.Join(interfacesToBridge, " ")
+	bridgedIfaceNames := make([]string, len(interfacesToBridge))
+	for i, name := range interfacesToBridge {
+		bridgedIfaceNames[i] = fmt.Sprintf("%s%s", bridgePrefix, name)
+	}
+	output := make(map[string][]string, len(s.pythonVersions))
+	for _, python := range s.pythonVersions {
+		expected := make([]string, 0)
+		expected = append(expected, fmt.Sprintf("%s %s --output=%s --bridge-prefix=%s %s %s", python, s.testPythonScript, s.testBashScriptNewENIPath, bridgePrefix, s.testConfigPath, interfaces))
+		expected = append(expected, fmt.Sprintf("ifdown --exclude=lo --interfaces=%s %s", s.testConfigPath, interfaces))
+		if isBonded {
+			expected = append(expected, "sleeping to work around https://bugs.launchpad.net/ubuntu/+source/ifenslave/+bug/1269921")
+			expected = append(expected, "sleeping to work around https://bugs.launchpad.net/juju/+bug/1594855")
+			expected = append(expected, fmt.Sprintf("sleep %v", bondSleepDuration))
+		}
+		expected = append(expected, fmt.Sprintf("ifup --exclude=lo --interfaces=%s %s", s.testBashScriptNewENIPath, strings.Join(bridgedIfaceNames, " ")))
+		expected = append(expected, fmt.Sprintf("chmod 644 %s", s.testBashScriptNewENIPath))
+		expected = append(expected, fmt.Sprintf("cp --backup=numbered %s %s", s.testBashScriptNewENIPath, s.testConfigPath))
+		output[python] = expected
+	}
+	return output
+}
+
+func (s *bridgeConfigSuite) TestBashScriptWithMissingArguments(c *gc.C) {
+	for i, python := range s.pythonVersions {
+		c.Logf("test #%v using %s", i, python)
+		_, exitCode := s.runBashScript(c, 0, python, "", nil)
+		c.Check(exitCode, gc.Equals, 2)
+	}
+}
+
+func (s *bridgeConfigSuite) TestBashBridgeScriptWithoutBondedInterfaceSingle(c *gc.C) {
+	bridgePrefix := "TestBashBridgeScriptWithoutBondedInterface-"
+	interfacesToBridge := []string{"eth0"}
+	testCombo := s.bashScriptExpectedOutputHelper(false, 0, bridgePrefix, interfacesToBridge)
+	for python, expectedOutput := range testCombo {
+		s.assertBashScript(c, 0, python, networkDHCPInitial, expectedOutput, bridgePrefix, interfacesToBridge)
+	}
+}
+
+func (s *bridgeConfigSuite) TestBashBridgeScriptWithoutBondedInterfaceMultiple(c *gc.C) {
+	bridgePrefix := "TestBashBridgeScriptWithoutBondedInterface-"
+	interfacesToBridge := []string{"eth0", "eth1"}
+	testCombo := s.bashScriptExpectedOutputHelper(false, 0, bridgePrefix, interfacesToBridge)
+	for python, expectedOutput := range testCombo {
+		s.assertBashScript(c, 0, python, networkDHCPInitial, expectedOutput, bridgePrefix, interfacesToBridge)
+	}
+}
+
+func (s *bridgeConfigSuite) TestBashBridgeScriptWithBondedInterfaceSingle(c *gc.C) {
+	bridgePrefix := "TestBashBridgeScriptWithBondedInterface-"
+	interfacesToBridge := []string{"bond0"}
+	testCombo := s.bashScriptExpectedOutputHelper(true, 4, bridgePrefix, interfacesToBridge)
+	for python, expectedOutput := range testCombo {
+		s.assertBashScript(c, 4, python, networkSmorgasboardInitial, expectedOutput, bridgePrefix, interfacesToBridge)
+	}
+}
+
+func (s *bridgeConfigSuite) TestBashBridgeScriptWithBondedInterfaceMultiple(c *gc.C) {
+	bridgePrefix := "TestBashBridgeScriptWithBondedInterface-"
+	interfacesToBridge := []string{"bond0", "bond1"}
+	testCombo := s.bashScriptExpectedOutputHelper(true, 8, bridgePrefix, interfacesToBridge)
+	for python, expectedOutput := range testCombo {
+		s.assertBashScript(c, 8, python, networkSmorgasboardInitial, expectedOutput, bridgePrefix, interfacesToBridge)
+	}
+}
+
+func (s *bridgeConfigSuite) runBashScript(c *gc.C, bondSleepDuration int, pythonBinary, bridgePrefix string, interfacesToBridge []string) (output []string, exitCode int) {
+	script := fmt.Sprintf("DEBUG=0 BRIDGE_PREFIX=%s PREFERRED_PYTHON_BINARY=%s BOND_SLEEP_DURATION=%v NEW_ENI_FILE=%s LOG_STATE=0 DRY_RUN=echo CHECK_PACKAGES_INSTALLED=0 %s %s %s\n",
+		bridgePrefix,
+		pythonBinary,
+		bondSleepDuration,
+		s.testBashScriptNewENIPath,
+		s.testBashScript,
+		s.testConfigPath,
+		strings.Join(interfacesToBridge, " "))
+	c.Log(script)
+	result, err := exec.RunCommands(exec.RunParams{Commands: script})
+	c.Assert(err, jc.ErrorIsNil, gc.Commentf("script failed unexpectedly"))
+	stdout := strings.Split(string(result.Stdout), "\n")
+	stderr := strings.Split(string(result.Stderr), "\n")
+	output = make([]string, 0, len(stdout)+len(stderr)+1)
+	for _, s := range stdout {
+		s = strings.Trim(s, "\n")
+		if s != "" {
+			output = append(output, s)
+		}
+	}
+	for _, s := range stderr {
+		s = strings.Trim(s, "\n")
+		if s != "" {
+			output = append(output, s)
+		}
+	}
+	return output, result.Code
 }
 
 // The rest of the file contains various forms of network config for
