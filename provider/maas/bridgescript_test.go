@@ -51,11 +51,11 @@ func (s *bridgeConfigSuite) SetUpTest(c *gc.C) {
 	c.Assert(s.pythonVersions, gc.Not(gc.HasLen), 0)
 
 	s.testConfigPath = filepath.Join(c.MkDir(), "network-config")
-	s.testPythonScript = filepath.Join(c.MkDir(), bridgeScriptName)
+	s.testPythonScript = filepath.Join(c.MkDir(), bridgeScriptPythonFilename)
 	s.testConfig = "# test network config\n"
 	err := ioutil.WriteFile(s.testConfigPath, []byte(s.testConfig), 0644)
 	c.Assert(err, jc.ErrorIsNil)
-	err = ioutil.WriteFile(s.testPythonScript, []byte(bridgeScriptPython), 0644)
+	err = ioutil.WriteFile(s.testPythonScript, []byte(bridgeScriptPythonContent), 0644)
 	c.Assert(err, jc.ErrorIsNil)
 }
 
@@ -143,12 +143,9 @@ func (s *bridgeConfigSuite) TestBridgeScriptWithDefaultPrefixTransformation(c *g
 func (s *bridgeConfigSuite) TestBridgeScriptInterfaceNameArgumentRequired(c *gc.C) {
 	for i, python := range s.pythonVersions {
 		c.Logf("test #%v using %s", i, python)
-		output, code := s.runScript(c, python, "# no content", "", "juju-br0", "")
+		output, code := s.runScript(c, python, "", "", "juju-br0", "")
 		c.Check(code, gc.Equals, 2)
-		// We match very lazily here to isolate ourselves from
-		// the different formatting of argparse error messages
-		// that has occured between Python 2 and Python 3.
-		c.Check(strings.Trim(output, "\n"), gc.Matches, "(\n|.)*error:.*--interfaces-to-bridge.*")
+		c.Check(strings.Trim(output, "\n"), gc.Matches, "(\n|.)*error: no interfaces specified")
 	}
 }
 
@@ -169,11 +166,9 @@ func (s *bridgeConfigSuite) runScript(c *gc.C, pythonBinary, configFile, bridgeP
 		bridgeName = fmt.Sprintf("--bridge-name=%q", bridgeName)
 	}
 
-	if interfaceToBridge != "" {
-		interfaceToBridge = fmt.Sprintf("--interfaces-to-bridge=%q", interfaceToBridge)
-	}
-
-	script := fmt.Sprintf("%q %q %s %s %s %q\n", pythonBinary, s.testPythonScript, bridgePrefix, bridgeName, interfaceToBridge, configFile)
+	script := fmt.Sprintf("%q %q %s %s %q %s\n",
+		pythonBinary, s.testPythonScript,
+		bridgeName, bridgePrefix, configFile, interfaceToBridge)
 	c.Log(script)
 	result, err := exec.RunCommands(exec.RunParams{Commands: script})
 	c.Assert(err, jc.ErrorIsNil, gc.Commentf("script failed unexpectedly"))

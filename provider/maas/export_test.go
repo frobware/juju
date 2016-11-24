@@ -14,6 +14,7 @@ var (
 	ShortAttempt                    = &shortAttempt
 	BridgeScriptWrapperForCloudInit = bridgeScriptWrapperForCloudInit
 	BridgeScriptPathForSeries       = bridgeScriptPathForSeries
+	BridgeScriptPythonFilename      = bridgeScriptPythonFilename
 )
 
 func GetMAASClient(env environs.Environ) *gomaasapi.MAASObject {

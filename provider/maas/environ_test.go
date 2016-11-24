@@ -147,7 +147,7 @@ func (*environSuite) TestNewCloudinitConfig(c *gc.C) {
 	env, err := maas.NewEnviron(getSimpleCloudSpec(), cfg)
 	c.Assert(err, jc.ErrorIsNil)
 	var path string
-	path, err = maas.BridgeScriptPathForSeries("quantal")
+	path, err = maas.BridgeScriptPathForSeries("quantal", maas.BridgeScriptPythonFilename)
 	c.Assert(err, jc.ErrorIsNil)
 	modifyNetworkScript := maas.BridgeScriptWrapperForCloudInit(path, []string{"eth0", "eth1"})
 	script := expectedCloudinitConfig
@@ -172,19 +172,19 @@ func (*environSuite) TestNewCloudinitConfigWithDisabledNetworkManagement(c *gc.C
 }
 
 func (*environSuite) TestRenderEtcNetworkInterfacesScriptMultipleNames(c *gc.C) {
-	path, err := maas.BridgeScriptPathForSeries("quantal")
+	path, err := maas.BridgeScriptPathForSeries("quantal", maas.BridgeScriptPythonFilename)
 	c.Assert(err, jc.ErrorIsNil)
 	script := maas.BridgeScriptWrapperForCloudInit(path, []string{"eth0", "eth0:1", "eth2", "eth1"})
-	c.Check(script, jc.Contains, `--interfaces-to-bridge="eth0 eth0:1 eth2 eth1"`)
-	c.Check(script, jc.Contains, `--bridge-prefix="br-"`)
+	c.Check(script, jc.Contains, `eth0 eth0:1 eth2 eth1`)
+	c.Check(script, jc.Contains, `BRIDGE-PREFIX="br-"`)
 }
 
 func (*environSuite) TestRenderEtcNetworkInterfacesScriptSingleName(c *gc.C) {
-	path, err := maas.BridgeScriptPathForSeries("quantal")
+	path, err := maas.BridgeScriptPathForSeries("quantal", maas.BridgeScriptPythonFilename)
 	c.Assert(err, jc.ErrorIsNil)
 	script := maas.BridgeScriptWrapperForCloudInit(path, []string{"eth0"})
-	c.Check(script, jc.Contains, `--interfaces-to-bridge="eth0"`)
-	c.Check(script, jc.Contains, `--bridge-prefix="br-"`)
+	c.Check(script, jc.Contains, `eth0`)
+	c.Check(script, jc.Contains, `BRIDGE-PREFIX="br-"`)
 }
 
 type badEndpointSuite struct {
