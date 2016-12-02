@@ -199,7 +199,7 @@ func (s *bridgeConfigSuite) assertBashScript(c *gc.C, bondSleepDuration int, pyt
 	c.Check(output, gc.DeepEquals, expected)
 }
 
-func (s *bridgeConfigSuite) bashScriptExpectedOutputHelper(isBonded bool, bondSleepDuration int, bridgePrefix string, interfacesToBridge []string) map[string][]string {
+func (s *bridgeConfigSuite) bashScriptExpectedOutputHelper(isBonded, isAlreadyBridged bool, bondSleepDuration int, bridgePrefix string, interfacesToBridge []string) map[string][]string {
 	interfaces := strings.Join(interfacesToBridge, " ")
 	bridgedIfaceNames := make([]string, len(interfacesToBridge))
 	for i, name := range interfacesToBridge {
@@ -209,6 +209,10 @@ func (s *bridgeConfigSuite) bashScriptExpectedOutputHelper(isBonded bool, bondSl
 	for _, python := range s.pythonVersions {
 		expected := make([]string, 0)
 		expected = append(expected, fmt.Sprintf("%s %s --output=%s --bridge-prefix=%s %s %s", python, s.testPythonScript, s.testBashScriptNewENIPath, bridgePrefix, s.testConfigPath, interfaces))
+		if isAlreadyBridged {
+			expected = append(expected, "nothing to bridge, or already bridged.")
+			break
+		}
 		expected = append(expected, fmt.Sprintf("ifdown --exclude=lo --interfaces=%s %s", s.testConfigPath, interfaces))
 		if isBonded {
 			expected = append(expected, "sleeping to work around https://bugs.launchpad.net/ubuntu/+source/ifenslave/+bug/1269921")
@@ -232,38 +236,47 @@ func (s *bridgeConfigSuite) TestBashScriptWithMissingArguments(c *gc.C) {
 }
 
 func (s *bridgeConfigSuite) TestBashBridgeScriptWithoutBondedInterfaceSingle(c *gc.C) {
-	bridgePrefix := "TestBashBridgeScriptWithoutBondedInterface-"
+	bridgePrefix := "TestBashBridgeScriptWithoutBondedInterfaceSingle"
 	interfacesToBridge := []string{"eth0"}
-	testCombo := s.bashScriptExpectedOutputHelper(false, 0, bridgePrefix, interfacesToBridge)
+	testCombo := s.bashScriptExpectedOutputHelper(false, false, 0, bridgePrefix, interfacesToBridge)
 	for python, expectedOutput := range testCombo {
 		s.assertBashScript(c, 0, python, networkDHCPInitial, expectedOutput, bridgePrefix, interfacesToBridge)
 	}
 }
 
 func (s *bridgeConfigSuite) TestBashBridgeScriptWithoutBondedInterfaceMultiple(c *gc.C) {
-	bridgePrefix := "TestBashBridgeScriptWithoutBondedInterface-"
+	bridgePrefix := "TestBashBridgeScriptWithoutBondedInterfaceMultiple"
 	interfacesToBridge := []string{"eth0", "eth1"}
-	testCombo := s.bashScriptExpectedOutputHelper(false, 0, bridgePrefix, interfacesToBridge)
+	testCombo := s.bashScriptExpectedOutputHelper(false, false, 0, bridgePrefix, interfacesToBridge)
 	for python, expectedOutput := range testCombo {
 		s.assertBashScript(c, 0, python, networkDHCPInitial, expectedOutput, bridgePrefix, interfacesToBridge)
 	}
 }
 
 func (s *bridgeConfigSuite) TestBashBridgeScriptWithBondedInterfaceSingle(c *gc.C) {
-	bridgePrefix := "TestBashBridgeScriptWithBondedInterface-"
+	bridgePrefix := "TestBashBridgeScriptWithBondedInterfaceSingle"
 	interfacesToBridge := []string{"bond0"}
-	testCombo := s.bashScriptExpectedOutputHelper(true, 4, bridgePrefix, interfacesToBridge)
+	testCombo := s.bashScriptExpectedOutputHelper(true, false, 4, bridgePrefix, interfacesToBridge)
 	for python, expectedOutput := range testCombo {
 		s.assertBashScript(c, 4, python, networkSmorgasboardInitial, expectedOutput, bridgePrefix, interfacesToBridge)
 	}
 }
 
 func (s *bridgeConfigSuite) TestBashBridgeScriptWithBondedInterfaceMultiple(c *gc.C) {
-	bridgePrefix := "TestBashBridgeScriptWithBondedInterface-"
+	bridgePrefix := "TestBashBridgeScriptWithBondedInterfaceMultiple"
 	interfacesToBridge := []string{"bond0", "bond1"}
-	testCombo := s.bashScriptExpectedOutputHelper(true, 8, bridgePrefix, interfacesToBridge)
+	testCombo := s.bashScriptExpectedOutputHelper(true, false, 8, bridgePrefix, interfacesToBridge)
 	for python, expectedOutput := range testCombo {
 		s.assertBashScript(c, 8, python, networkSmorgasboardInitial, expectedOutput, bridgePrefix, interfacesToBridge)
+	}
+}
+
+func (s *bridgeConfigSuite) TestBashBridgeScriptWithBondedInterfaceAlreadyBridged(c *gc.C) {
+	bridgePrefix := "TestBashBridgeScriptWithBondedInterfaceAlreadyBridged"
+	interfacesToBridge := []string{"eth1"}
+	testCombo := s.bashScriptExpectedOutputHelper(true, true, 8, bridgePrefix, interfacesToBridge)
+	for python, expectedOutput := range testCombo {
+		s.assertBashScript(c, 8, python, networkPartiallyBridgedInitial, expectedOutput, bridgePrefix, interfacesToBridge)
 	}
 }
 
