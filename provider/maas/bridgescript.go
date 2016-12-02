@@ -3,7 +3,7 @@
 package maas
 
 const bridgeScriptBashFilename = "bridge-interface"
-const bridgeScriptPythonFilename = "bridge-interface.py"
+const bridgeScriptPythonFilename = "add-bridge.py"
 
 const bridgeScriptPythonContent = `#!/usr/bin/env python
 
@@ -485,7 +485,7 @@ if [ -z "$NEW_ENI_FILE" ]; then
 #    trap 'rm -f "$NEW_ENI_FILE"' EXIT
 fi
 
-$DRY_RUN $PREFERRED_PYTHON_BINARY "$SCRIPTPATH/bridge-interface.py" --output="$NEW_ENI_FILE" --bridge-prefix="$BRIDGE_PREFIX" "$orig_file" "$@"
+$DRY_RUN $PREFERRED_PYTHON_BINARY "$SCRIPTPATH/add-bridge.py" --output="$NEW_ENI_FILE" --bridge-prefix="$BRIDGE_PREFIX" "$orig_file" "$@"
 
 if [ $? -ne 0 ]; then
     echo "error: failed to add bridge stanzas to $orig_file"
