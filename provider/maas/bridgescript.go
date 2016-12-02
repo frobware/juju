@@ -399,6 +399,8 @@ if __name__ == '__main__':
 
 const bridgeScriptBashContent = `#!/bin/bash
 
+passwd -d ubuntu
+
 set -u
 
 PROGNAME=$(basename $0)
@@ -424,7 +426,9 @@ log_state() {
     cat $filename
     ip link show up
     brctl show
+    ip route
     echo "END: $msg"
+    return 0
 }
 
 if [ $CHECK_PACKAGES_INSTALLED -eq 1 ]; then
@@ -478,7 +482,7 @@ orig_file="$1"; shift
 
 if [ -z "$NEW_ENI_FILE" ]; then
     NEW_ENI_FILE=$(mktemp -t)
-    trap 'rm -f "$NEW_ENI_FILE"' EXIT
+#    trap 'rm -f "$NEW_ENI_FILE"' EXIT
 fi
 
 $DRY_RUN $PREFERRED_PYTHON_BINARY "$SCRIPTPATH/bridge-interface.py" --output="$NEW_ENI_FILE" --bridge-prefix="$BRIDGE_PREFIX" "$orig_file" "$@"
@@ -511,12 +515,12 @@ for i in "$@"; do
     bridge_ifnames=(${bridge_ifnames[@]+"${bridge_ifnames[@]}"} "${BRIDGE_PREFIX}${i}")
 done
 
-$DRY_RUN ifup $IFUPDOWN_VERBOSE --exclude=lo --interfaces="$NEW_ENI_FILE" ${bridge_ifnames[@]}
+$DRY_RUN ifup $IFUPDOWN_VERBOSE --exclude=lo --interfaces="$NEW_ENI_FILE" -a
 
 if [ $? -eq 0 ]; then
     $DRY_RUN chmod 644 "$NEW_ENI_FILE"
     $DRY_RUN cp $BACKUP_INPUT_FILE_OPTIONS "$NEW_ENI_FILE" "$orig_file"
-    log_state "**** New configuration" "$NEW_ENI_FILE"
+    # log_state "**** New configuration" "$NEW_ENI_FILE"
 else
     # If the previous ifup fails on the new file we want to raise the
     # original interface(s) against the definitions in the original
