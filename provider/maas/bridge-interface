@@ -102,7 +102,8 @@ if cmp -s "$orig_file" "$NEW_ENI_FILE"; then
 fi
 
 log_state "**** Original configuration" $orig_file
-$DRY_RUN ifdown $IFUPDOWN_VERBOSE --exclude=lo --interfaces="$orig_file" "$@"
+ifquery=$(ifquery --exclude=lo --interfaces="$orig_file" --list)
+$DRY_RUN ifdown $IFUPDOWN_VERBOSE --exclude=lo --interfaces="$orig_file" $ifquery
 
 if grep -q 'bond-' "$orig_file"; then
     echo "sleeping to work around https://bugs.launchpad.net/ubuntu/+source/ifenslave/+bug/1269921"
@@ -118,4 +119,4 @@ done
 
 $DRY_RUN chmod 644 "$NEW_ENI_FILE"
 $DRY_RUN cp $BACKUP_INPUT_FILE_OPTIONS "$NEW_ENI_FILE" "$orig_file"
-$DRY_RUN ifup $IFUPDOWN_VERBOSE --exclude=lo --interfaces="$orig_file" ${bridge_ifnames[@]}
+$DRY_RUN ifup $IFUPDOWN_VERBOSE --exclude=lo --interfaces="$orig_file" $ifquery
