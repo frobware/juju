@@ -116,8 +116,6 @@ for i in "$@"; do
     bridge_ifnames=(${bridge_ifnames[@]+"${bridge_ifnames[@]}"} "${BRIDGE_PREFIX}${i}")
 done
 
-set -e
-
 $DRY_RUN chmod 644 "$NEW_ENI_FILE"
 $DRY_RUN cp $BACKUP_INPUT_FILE_OPTIONS "$NEW_ENI_FILE" "$orig_file"
 $DRY_RUN ifup $IFUPDOWN_VERBOSE --exclude=lo --interfaces="$orig_file" ${bridge_ifnames[@]}
