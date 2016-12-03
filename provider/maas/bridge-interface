@@ -116,15 +116,8 @@ for i in "$@"; do
     bridge_ifnames=(${bridge_ifnames[@]+"${bridge_ifnames[@]}"} "${BRIDGE_PREFIX}${i}")
 done
 
-$DRY_RUN ifup $IFUPDOWN_VERBOSE --exclude=lo --interfaces="$NEW_ENI_FILE" -a
+set -e
 
-if [ $? -eq 0 ]; then
-    $DRY_RUN chmod 644 "$NEW_ENI_FILE"
-    $DRY_RUN cp $BACKUP_INPUT_FILE_OPTIONS "$NEW_ENI_FILE" "$orig_file"
-    # log_state "**** New configuration" "$NEW_ENI_FILE"
-else
-    # If the previous ifup fails on the new file we want to raise the
-    # original interface(s) against the definitions in the original
-    # file.
-    $DRY_RUN ifup --force $IFUPDOWN_VERBOSE --interfaces="$orig_file" -a
-fi
+$DRY_RUN chmod 644 "$NEW_ENI_FILE"
+$DRY_RUN cp $BACKUP_INPUT_FILE_OPTIONS "$NEW_ENI_FILE" "$orig_file"
+$DRY_RUN ifup $IFUPDOWN_VERBOSE --exclude=lo --interfaces="$orig_file" ${bridge_ifnames[@]}
