@@ -18,21 +18,24 @@ import (
 var lxdLogger = loggo.GetLogger("juju.provisioner.lxd")
 
 var NewLxdBroker = func(
+	hostMachineID string,
 	api APICalls,
 	manager container.Manager,
 	agentConfig agent.Config,
 ) (environs.InstanceBroker, error) {
 	return &lxdBroker{
-		manager:     manager,
-		api:         api,
-		agentConfig: agentConfig,
+		hostMachineID: hostMachineID,
+		manager:       manager,
+		api:           api,
+		agentConfig:   agentConfig,
 	}, nil
 }
 
 type lxdBroker struct {
-	manager     container.Manager
-	api         APICalls
-	agentConfig agent.Config
+	hostMachineID string
+	manager       container.Manager
+	api           APICalls
+	agentConfig   agent.Config
 }
 
 func (broker *lxdBroker) StartInstance(args environs.StartInstanceParams) (*environs.StartInstanceResult, error) {
@@ -49,6 +52,7 @@ func (broker *lxdBroker) StartInstance(args environs.StartInstanceParams) (*envi
 	}
 
 	preparedInfo, err := prepareOrGetContainerInterfaceInfo(
+		broker.hostMachineID,
 		broker.api,
 		machineId,
 		bridgeDevice,
@@ -149,6 +153,7 @@ func (broker *lxdBroker) MaintainInstance(args environs.StartInstanceParams) err
 
 	// There's no InterfaceInfo we expect to get below.
 	_, err := prepareOrGetContainerInterfaceInfo(
+		broker.hostMachineID,
 		broker.api,
 		machineID,
 		bridgeDevice,

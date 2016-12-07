@@ -18,6 +18,7 @@ import (
 var kvmLogger = loggo.GetLogger("juju.provisioner.kvm")
 
 func NewKvmBroker(
+	hostMachineID string,
 	api APICalls,
 	agentConfig agent.Config,
 	managerConfig container.ManagerConfig,
@@ -27,16 +28,18 @@ func NewKvmBroker(
 		return nil, err
 	}
 	return &kvmBroker{
-		manager:     manager,
-		api:         api,
-		agentConfig: agentConfig,
+		hostMachineID: hostMachineID,
+		manager:       manager,
+		api:           api,
+		agentConfig:   agentConfig,
 	}, nil
 }
 
 type kvmBroker struct {
-	manager     container.Manager
-	api         APICalls
-	agentConfig agent.Config
+	hostMachineID string
+	manager       container.Manager
+	api           APICalls
+	agentConfig   agent.Config
 }
 
 // StartInstance is specified in the Broker interface.
@@ -60,6 +63,7 @@ func (broker *kvmBroker) StartInstance(args environs.StartInstanceParams) (*envi
 	}
 
 	preparedInfo, err := prepareOrGetContainerInterfaceInfo(
+		broker.hostMachineID,
 		broker.api,
 		machineId,
 		bridgeDevice,
@@ -148,6 +152,7 @@ func (broker *kvmBroker) MaintainInstance(args environs.StartInstanceParams) err
 
 	// There's no InterfaceInfo we expect to get below.
 	_, err := prepareOrGetContainerInterfaceInfo(
+		broker.hostMachineID,
 		broker.api,
 		machineID,
 		bridgeDevice,
