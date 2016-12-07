@@ -10,6 +10,7 @@ import (
 	"github.com/juju/version"
 	"gopkg.in/juju/names.v2"
 
+	"github.com/juju/juju/apiserver/common/networkingcommon"
 	"github.com/juju/juju/apiserver/params"
 	"github.com/juju/juju/container"
 	"github.com/juju/juju/instance"
@@ -22,6 +23,7 @@ type APICalls interface {
 	PrepareContainerInterfaceInfo(names.MachineTag) ([]network.InterfaceInfo, error)
 	GetContainerInterfaceInfo(names.MachineTag) ([]network.InterfaceInfo, error)
 	ReleaseContainerAddresses(names.MachineTag) error
+	SetHostMachineNetworkConfig(string, []params.NetworkConfig) error
 }
 
 type hostArchToolsFinder struct {
@@ -38,7 +40,44 @@ func (h hostArchToolsFinder) FindTools(v version.Number, series, _ string) (tool
 // system. Defined here so it can be overriden for testing.
 var resolvConf = "/etc/resolv.conf"
 
+var getObservedNetworkConfig = networkingcommon.GetObservedNetworkConfig
+
+func prepareHost(
+	bridger network.Bridger,
+	hostMachineID string,
+	api APICalls,
+	log loggo.Logger,
+) error {
+	devicesToBridge := []string{"ens3", "ens5"} // will come from api.PrepareContainerInterfaceInfo()
+
+	err := bridger.Bridge(devicesToBridge)
+
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	observedConfig, err := getObservedNetworkConfig(networkingcommon.DefaultNetworkConfigSource())
+
+	if err != nil {
+		return errors.Annotate(err, "cannot discover observed network config")
+	} else if len(observedConfig) == 0 {
+		logger.Warningf("not updating network config: no observed config found to update")
+	}
+
+	if len(observedConfig) > 0 {
+		err := api.SetHostMachineNetworkConfig(hostMachineID, observedConfig)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		logger.Debugf("observed network config updated")
+	}
+
+	return nil
+}
+
 func prepareOrGetContainerInterfaceInfo(
+	bridger network.Bridger,
+	hostMachineID string,
 	api APICalls,
 	machineID string,
 	bridgeDevice string,
@@ -60,6 +99,7 @@ func prepareOrGetContainerInterfaceInfo(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
 	log.Tracef("PrepareContainerInterfaceInfo returned %+v", preparedInfo)
 
 	return preparedInfo, nil

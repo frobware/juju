@@ -15,11 +15,13 @@ import (
 	"github.com/juju/juju/agent"
 	apiprovisioner "github.com/juju/juju/api/provisioner"
 	"github.com/juju/juju/apiserver/params"
+	"github.com/juju/juju/cloudconfig/instancecfg"
 	"github.com/juju/juju/container"
 	"github.com/juju/juju/container/kvm"
 	"github.com/juju/juju/container/lxd"
 	"github.com/juju/juju/environs"
 	"github.com/juju/juju/instance"
+	"github.com/juju/juju/network"
 	"github.com/juju/juju/state"
 	"github.com/juju/juju/watcher"
 	"github.com/juju/juju/worker"
@@ -204,6 +206,8 @@ func (cs *ContainerSetup) getContainerArtifacts(
 	case instance.KVM:
 		initialiser = kvm.NewContainerInitialiser()
 		broker, err = NewKvmBroker(
+			network.NewEtcNetworkInterfacesBridger(clock.WallClock, 5*time.Minute, instancecfg.DefaultBridgePrefix),
+			cs.machine.Tag().String(),
 			cs.provisioner,
 			cs.config,
 			managerConfig,
@@ -224,6 +228,8 @@ func (cs *ContainerSetup) getContainerArtifacts(
 			return nil, nil, nil, err
 		}
 		broker, err = NewLxdBroker(
+			network.NewEtcNetworkInterfacesBridger(clock.WallClock, 5*time.Minute, instancecfg.DefaultBridgePrefix),
+			cs.machine.Tag().String(),
 			cs.provisioner,
 			manager,
 			cs.config,

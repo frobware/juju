@@ -46,6 +46,7 @@ type fakeAPI struct {
 
 	fakeContainerConfig params.ContainerConfig
 	fakeInterfaceInfo   network.InterfaceInfo
+	fakeBridger         network.Bridger
 }
 
 var _ provisioner.APICalls = (*fakeAPI)(nil)
@@ -111,6 +112,14 @@ func (f *fakeAPI) ReleaseContainerAddresses(tag names.MachineTag) error {
 	return nil
 }
 
+func (f *fakeAPI) SetHostMachineNetworkConfig(hostMachineID string, netConfig []params.NetworkConfig) error {
+	f.MethodCall(f, "SetHostMachineNetworkConfig", hostMachineID, netConfig)
+	if err := f.NextErr(); err != nil {
+		return err
+	}
+	return nil
+}
+
 type patcher interface {
 	PatchValue(destination, source interface{})
 }
@@ -169,15 +178,13 @@ func makeNoOpStatusCallback() func(settableStatus status.Status, info string, da
 	}
 }
 
-func callStartInstance(c *gc.C, s patcher, broker environs.InstanceBroker, machineId string) *environs.StartInstanceResult {
-	result, err := broker.StartInstance(environs.StartInstanceParams{
+func callStartInstance(c *gc.C, s patcher, broker environs.InstanceBroker, machineId string) (*environs.StartInstanceResult, error) {
+	return broker.StartInstance(environs.StartInstanceParams{
 		Constraints:    constraints.Value{},
 		Tools:          makePossibleTools(),
 		InstanceConfig: makeInstanceConfig(c, s, machineId),
 		StatusCallback: makeNoOpStatusCallback(),
 	})
-	c.Assert(err, jc.ErrorIsNil)
-	return result
 }
 
 func callMaintainInstance(c *gc.C, s patcher, broker environs.InstanceBroker, machineId string) {

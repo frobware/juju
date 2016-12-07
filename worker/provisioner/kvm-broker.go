@@ -13,11 +13,14 @@ import (
 	"github.com/juju/juju/container/kvm"
 	"github.com/juju/juju/environs"
 	"github.com/juju/juju/instance"
+	"github.com/juju/juju/network"
 )
 
 var kvmLogger = loggo.GetLogger("juju.provisioner.kvm")
 
 func NewKvmBroker(
+	bridger network.Bridger,
+	hostMachineID string,
 	api APICalls,
 	agentConfig agent.Config,
 	managerConfig container.ManagerConfig,
@@ -27,16 +30,20 @@ func NewKvmBroker(
 		return nil, err
 	}
 	return &kvmBroker{
-		manager:     manager,
-		api:         api,
-		agentConfig: agentConfig,
+		bridger:       bridger,
+		hostMachineID: hostMachineID,
+		manager:       manager,
+		api:           api,
+		agentConfig:   agentConfig,
 	}, nil
 }
 
 type kvmBroker struct {
-	manager     container.Manager
-	api         APICalls
-	agentConfig agent.Config
+	bridger       network.Bridger
+	hostMachineID string
+	manager       container.Manager
+	api           APICalls
+	agentConfig   agent.Config
 }
 
 // StartInstance is specified in the Broker interface.
@@ -59,7 +66,14 @@ func (broker *kvmBroker) StartInstance(args environs.StartInstanceParams) (*envi
 		return nil, err
 	}
 
+	err = prepareHost(broker.bridger, broker.hostMachineID, broker.api, kvmLogger)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	preparedInfo, err := prepareOrGetContainerInterfaceInfo(
+		broker.bridger,
+		broker.hostMachineID,
 		broker.api,
 		machineId,
 		bridgeDevice,
@@ -148,6 +162,8 @@ func (broker *kvmBroker) MaintainInstance(args environs.StartInstanceParams) err
 
 	// There's no InterfaceInfo we expect to get below.
 	_, err := prepareOrGetContainerInterfaceInfo(
+		broker.bridger,
+		broker.hostMachineID,
 		broker.api,
 		machineID,
 		bridgeDevice,
