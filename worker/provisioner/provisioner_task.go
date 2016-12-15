@@ -12,7 +12,7 @@ import (
 	"gopkg.in/juju/names.v2"
 
 	apiprovisioner "github.com/juju/juju/api/provisioner"
-	"github.com/juju/juju/apiserver/common/networkingcommon"
+	"github.com/juju/juju/apiserver/common"
 	"github.com/juju/juju/apiserver/params"
 	"github.com/juju/juju/cloudconfig/instancecfg"
 	"github.com/juju/juju/constraints"
@@ -724,7 +724,7 @@ func (task *provisionerTask) startMachine(
 		}
 	}
 
-	networkConfig := networkingcommon.NetworkConfigFromInterfaceInfo(result.NetworkInfo)
+	networkConfig := common.NetworkConfigFromInterfaceInfo(result.NetworkInfo)
 	volumes := volumesToAPIserver(result.Volumes)
 	volumeNameToAttachmentInfo := volumeAttachmentsToAPIserver(result.VolumeAttachments)
 

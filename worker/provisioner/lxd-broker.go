@@ -8,6 +8,7 @@ import (
 	"github.com/juju/loggo"
 
 	"github.com/juju/juju/agent"
+	apiprovisioner "github.com/juju/juju/api/provisioner"
 	"github.com/juju/juju/cloudconfig/instancecfg"
 	"github.com/juju/juju/container"
 	"github.com/juju/juju/environs"
@@ -18,24 +19,24 @@ import (
 var lxdLogger = loggo.GetLogger("juju.provisioner.lxd")
 
 var NewLxdBroker = func(
-	hostMachineID string,
+	hostMachine *apiprovisioner.Machine,
 	api APICalls,
 	manager container.Manager,
 	agentConfig agent.Config,
 ) (environs.InstanceBroker, error) {
 	return &lxdBroker{
-		hostMachineID: hostMachineID,
-		manager:       manager,
-		api:           api,
-		agentConfig:   agentConfig,
+		hostMachine: hostMachine,
+		manager:     manager,
+		api:         api,
+		agentConfig: agentConfig,
 	}, nil
 }
 
 type lxdBroker struct {
-	hostMachineID string
-	manager       container.Manager
-	api           APICalls
-	agentConfig   agent.Config
+	hostMachine *apiprovisioner.Machine
+	manager     container.Manager
+	api         APICalls
+	agentConfig agent.Config
 }
 
 func (broker *lxdBroker) StartInstance(args environs.StartInstanceParams) (*environs.StartInstanceResult, error) {
@@ -52,7 +53,7 @@ func (broker *lxdBroker) StartInstance(args environs.StartInstanceParams) (*envi
 	}
 
 	preparedInfo, err := prepareOrGetContainerInterfaceInfo(
-		broker.hostMachineID,
+		broker.hostMachine,
 		broker.api,
 		machineId,
 		bridgeDevice,
@@ -153,7 +154,7 @@ func (broker *lxdBroker) MaintainInstance(args environs.StartInstanceParams) err
 
 	// There's no InterfaceInfo we expect to get below.
 	_, err := prepareOrGetContainerInterfaceInfo(
-		broker.hostMachineID,
+		broker.hostMachine,
 		broker.api,
 		machineID,
 		bridgeDevice,

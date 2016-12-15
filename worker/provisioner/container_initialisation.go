@@ -204,7 +204,7 @@ func (cs *ContainerSetup) getContainerArtifacts(
 	case instance.KVM:
 		initialiser = kvm.NewContainerInitialiser()
 		broker, err = NewKvmBroker(
-			cs.machine.Id(),
+			cs.machine,
 			cs.provisioner,
 			cs.config,
 			managerConfig,
@@ -225,7 +225,7 @@ func (cs *ContainerSetup) getContainerArtifacts(
 			return nil, nil, nil, err
 		}
 		broker, err = NewLxdBroker(
-			cs.machine.Id(),
+			cs.machine,
 			cs.provisioner,
 			manager,
 			cs.config,

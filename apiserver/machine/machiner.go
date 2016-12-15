@@ -11,7 +11,6 @@ import (
 	"gopkg.in/juju/names.v2"
 
 	"github.com/juju/juju/apiserver/common"
-	"github.com/juju/juju/apiserver/common/networkingcommon"
 	"github.com/juju/juju/apiserver/facade"
 	"github.com/juju/juju/apiserver/params"
 	"github.com/juju/juju/state"
@@ -32,6 +31,7 @@ type MachinerAPI struct {
 	*common.DeadEnsurer
 	*common.AgentEntityWatcher
 	*common.APIAddresser
+	*common.HostMachineNetworkSetter
 
 	st           *state.State
 	auth         facade.Authorizer
@@ -51,15 +51,16 @@ func NewMachinerAPI(st *state.State, resources facade.Resources, authorizer faca
 		return authorizer.AuthOwner, nil
 	}
 	return &MachinerAPI{
-		LifeGetter:         common.NewLifeGetter(st, getCanRead),
-		StatusSetter:       common.NewStatusSetter(st, getCanModify),
-		DeadEnsurer:        common.NewDeadEnsurer(st, getCanModify),
-		AgentEntityWatcher: common.NewAgentEntityWatcher(st, resources, getCanRead),
-		APIAddresser:       common.NewAPIAddresser(st, resources),
-		st:                 st,
-		auth:               authorizer,
-		getCanModify:       getCanModify,
-		getCanRead:         getCanRead,
+		LifeGetter:               common.NewLifeGetter(st, getCanRead),
+		StatusSetter:             common.NewStatusSetter(st, getCanModify),
+		DeadEnsurer:              common.NewDeadEnsurer(st, getCanModify),
+		AgentEntityWatcher:       common.NewAgentEntityWatcher(st, resources, getCanRead),
+		APIAddresser:             common.NewAPIAddresser(st, resources),
+		HostMachineNetworkSetter: common.NewHostMachineNetworkSetter(st, getCanModify),
+		st:           st,
+		auth:         authorizer,
+		getCanModify: getCanModify,
+		getCanRead:   getCanRead,
 	}, nil
 }
 
@@ -167,7 +168,7 @@ func (api *MachinerAPI) SetObservedNetworkConfig(args params.SetMachineNetworkCo
 		return nil
 	}
 
-	mergedConfig := networkingcommon.MergeProviderAndObservedNetworkConfigs(providerConfig, observedConfig)
+	mergedConfig := common.MergeProviderAndObservedNetworkConfigs(providerConfig, observedConfig)
 	logger.Tracef("merged observed and provider network config: %+v", mergedConfig)
 
 	return api.setOneMachineNetworkConfig(m, mergedConfig)
@@ -202,7 +203,7 @@ func (api *MachinerAPI) getMachineForSettingNetworkConfig(machineTag string) (*s
 }
 
 func (api *MachinerAPI) setOneMachineNetworkConfig(m *state.Machine, networkConfig []params.NetworkConfig) error {
-	devicesArgs, devicesAddrs := networkingcommon.NetworkConfigsToStateArgs(networkConfig)
+	devicesArgs, devicesAddrs := common.NetworkConfigsToStateArgs(networkConfig)
 
 	logger.Debugf("setting devices: %+v", devicesArgs)
 	if err := m.SetParentLinkLayerDevicesBeforeTheirChildren(devicesArgs); err != nil {
@@ -258,7 +259,7 @@ func (api *MachinerAPI) getOneMachineProviderNetworkConfig(m *state.Machine) ([]
 		return nil, errors.Trace(err)
 	}
 
-	netEnviron, err := networkingcommon.NetworkingEnvironFromModelConfig(
+	netEnviron, err := common.NetworkingEnvironFromModelConfig(
 		stateenvirons.EnvironConfigGetter{api.st},
 	)
 	if errors.IsNotSupported(err) {
@@ -277,7 +278,7 @@ func (api *MachinerAPI) getOneMachineProviderNetworkConfig(m *state.Machine) ([]
 		return nil, nil
 	}
 
-	providerConfig := networkingcommon.NetworkConfigFromInterfaceInfo(interfaceInfos)
+	providerConfig := common.NetworkConfigFromInterfaceInfo(interfaceInfos)
 	logger.Tracef("provider network config instance %q: %+v", instId, providerConfig)
 
 	return providerConfig, nil

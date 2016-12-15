@@ -240,12 +240,12 @@ func (st *State) prepareOrGetContainerInterfaceInfo(
 // SetHostMachineNetworkConfig sets the machine network configuration,
 // normally as observed on the machine, with that defined in
 // netConfig.
-func (st *State) SetHostMachineNetworkConfig(hostMachineTag names.MachineTag, netConfig []params.NetworkConfig) error {
+func (st *State) SetHostMachineNetworkConfig(hostMachine *Machine, netConfig []params.NetworkConfig) error {
 	args := params.SetMachineNetworkConfig{
-		Tag:    hostMachineTag.String(),
+		Tag:    hostMachine.Tag().String(),
 		Config: netConfig,
 	}
-	err := st.facade.FacadeCall("SetHostMachineNetworkConfig", args, nil)
+	err := st.facade.FacadeCall("SetObservedNetworkConfig", args, nil)
 	if err != nil {
 		return errors.Trace(err)
 	}

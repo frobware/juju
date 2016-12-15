@@ -12,6 +12,7 @@ import (
 	"github.com/juju/version"
 	"gopkg.in/juju/names.v2"
 
+	apiprovisioner "github.com/juju/juju/api/provisioner"
 	"github.com/juju/juju/apiserver/common/networkingcommon"
 	"github.com/juju/juju/apiserver/params"
 	"github.com/juju/juju/cloudconfig/instancecfg"
@@ -26,7 +27,7 @@ type APICalls interface {
 	PrepareContainerInterfaceInfo(names.MachineTag) ([]network.InterfaceInfo, error)
 	GetContainerInterfaceInfo(names.MachineTag) ([]network.InterfaceInfo, error)
 	ReleaseContainerAddresses(names.MachineTag) error
-	SetHostMachineNetworkConfig(names.MachineTag, []params.NetworkConfig) error
+	SetHostMachineNetworkConfig(*apiprovisioner.Machine, []params.NetworkConfig) error
 }
 
 type hostArchToolsFinder struct {
@@ -44,7 +45,7 @@ func (h hostArchToolsFinder) FindTools(v version.Number, series, _ string) (tool
 var resolvConf = "/etc/resolv.conf"
 
 func prepareOrGetContainerInterfaceInfo(
-	hostMachineID string,
+	hostMachine *apiprovisioner.Machine,
 	api APICalls,
 	machineID string,
 	bridgeDevice string,
@@ -76,7 +77,7 @@ func prepareOrGetContainerInterfaceInfo(
 		logger.Warningf("not updating network config: no observed config found to update")
 	}
 	if len(observedConfig) > 0 {
-		err := api.SetHostMachineNetworkConfig(names.NewMachineTag(hostMachineID), observedConfig)
+		err := api.SetHostMachineNetworkConfig(hostMachine, observedConfig)
 		if err != nil {
 			logger.Criticalf("WTF: %v", err)
 			return nil, errors.Trace(err)

@@ -12,7 +12,6 @@ import (
 	"gopkg.in/juju/names.v2"
 
 	"github.com/juju/juju/apiserver/common"
-	"github.com/juju/juju/apiserver/common/networkingcommon"
 	"github.com/juju/juju/apiserver/common/storagecommon"
 	"github.com/juju/juju/apiserver/facade"
 	"github.com/juju/juju/apiserver/params"
@@ -51,6 +50,7 @@ type ProvisionerAPI struct {
 	*common.InstanceIdGetter
 	*common.ToolsFinder
 	*common.ToolsGetter
+	*common.HostMachineNetworkSetter
 
 	st                      *state.State
 	resources               facade.Resources
@@ -114,20 +114,21 @@ func NewProvisionerAPI(st *state.State, resources facade.Resources, authorizer f
 	urlGetter := common.NewToolsURLGetter(model.UUID(), st)
 	storageProviderRegistry := stateenvirons.NewStorageProviderRegistry(env)
 	return &ProvisionerAPI{
-		Remover:                 common.NewRemover(st, false, getAuthFunc),
-		StatusSetter:            common.NewStatusSetter(st, getAuthFunc),
-		StatusGetter:            common.NewStatusGetter(st, getAuthFunc),
-		DeadEnsurer:             common.NewDeadEnsurer(st, getAuthFunc),
-		PasswordChanger:         common.NewPasswordChanger(st, getAuthFunc),
-		LifeGetter:              common.NewLifeGetter(st, getAuthFunc),
-		StateAddresser:          common.NewStateAddresser(st),
-		APIAddresser:            common.NewAPIAddresser(st, resources),
-		ModelWatcher:            common.NewModelWatcher(st, resources, authorizer),
-		ModelMachinesWatcher:    common.NewModelMachinesWatcher(st, resources, authorizer),
-		ControllerConfigAPI:     common.NewControllerConfig(st),
-		InstanceIdGetter:        common.NewInstanceIdGetter(st, getAuthFunc),
-		ToolsFinder:             common.NewToolsFinder(configGetter, st, urlGetter),
-		ToolsGetter:             common.NewToolsGetter(st, configGetter, st, urlGetter, getAuthOwner),
+		Remover:                  common.NewRemover(st, false, getAuthFunc),
+		StatusSetter:             common.NewStatusSetter(st, getAuthFunc),
+		StatusGetter:             common.NewStatusGetter(st, getAuthFunc),
+		DeadEnsurer:              common.NewDeadEnsurer(st, getAuthFunc),
+		PasswordChanger:          common.NewPasswordChanger(st, getAuthFunc),
+		LifeGetter:               common.NewLifeGetter(st, getAuthFunc),
+		StateAddresser:           common.NewStateAddresser(st),
+		APIAddresser:             common.NewAPIAddresser(st, resources),
+		ModelWatcher:             common.NewModelWatcher(st, resources, authorizer),
+		ModelMachinesWatcher:     common.NewModelMachinesWatcher(st, resources, authorizer),
+		ControllerConfigAPI:      common.NewControllerConfig(st),
+		InstanceIdGetter:         common.NewInstanceIdGetter(st, getAuthFunc),
+		ToolsFinder:              common.NewToolsFinder(configGetter, st, urlGetter),
+		ToolsGetter:              common.NewToolsGetter(st, configGetter, st, urlGetter, getAuthOwner),
+		HostMachineNetworkSetter: common.NewHostMachineNetworkSetter(st, getCanModify),
 		st:                      st,
 		resources:               resources,
 		authorizer:              authorizer,
@@ -490,7 +491,7 @@ func (p *ProvisionerAPI) SetInstanceInfo(args params.InstancesInfo) (params.Erro
 			return err
 		}
 
-		devicesArgs, devicesAddrs := networkingcommon.NetworkConfigsToStateArgs(arg.NetworkConfig)
+		devicesArgs, devicesAddrs := common.NetworkConfigsToStateArgs(arg.NetworkConfig)
 
 		err = machine.SetInstanceInfo(
 			arg.InstanceId, arg.Nonce, arg.Characteristics,
@@ -726,7 +727,7 @@ func (p *ProvisionerAPI) prepareOrGetContainerInterfaceInfo(args params.Entities
 		}
 		logger.Debugf("got allocated info from provider: %+v", allocatedInfo)
 
-		allocatedConfig := networkingcommon.NetworkConfigFromInterfaceInfo(allocatedInfo)
+		allocatedConfig := common.NetworkConfigFromInterfaceInfo(allocatedInfo)
 		logger.Tracef("allocated network config: %+v", allocatedConfig)
 		result.Results[i].Config = allocatedConfig
 	}
@@ -736,7 +737,7 @@ func (p *ProvisionerAPI) prepareOrGetContainerInterfaceInfo(args params.Entities
 // prepareContainerAccessEnvironment retrieves the environment, host machine, and access
 // for working with containers.
 func (p *ProvisionerAPI) prepareContainerAccessEnvironment() (environs.NetworkingEnviron, *state.Machine, common.AuthFunc, error) {
-	netEnviron, err := networkingcommon.NetworkingEnvironFromModelConfig(p.configGetter)
+	netEnviron, err := common.NetworkingEnvironFromModelConfig(p.configGetter)
 	if err != nil {
 		return nil, nil, nil, errors.Trace(err)
 	}
@@ -857,120 +858,4 @@ func (p *ProvisionerAPI) markOneMachineForRemoval(machineTag string, canAccess c
 		return errors.Trace(err)
 	}
 	return machine.MarkForRemoval()
-}
-
-func (p *ProvisionerAPI) getMachineForSettingNetworkConfig(machineTag string) (*state.Machine, error) {
-	canModify, err := p.getCanModify()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	tag, err := names.ParseMachineTag(machineTag)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	if !canModify(tag) {
-		return nil, errors.Trace(common.ErrPerm)
-	}
-
-	canAccess, err := p.getAuthFunc()
-	if err != nil {
-		return nil, err
-	}
-
-	m, err := p.getMachine(canAccess, tag)
-	if errors.IsNotFound(err) {
-		return nil, errors.Trace(common.ErrPerm)
-	} else if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	if m.IsContainer() {
-		logger.Warningf("not updating network config for container %q", m.Id())
-	}
-
-	return m, nil
-}
-
-func (p *ProvisionerAPI) setOneMachineNetworkConfig(m *state.Machine, networkConfig []params.NetworkConfig) error {
-	devicesArgs, devicesAddrs := networkingcommon.NetworkConfigsToStateArgs(networkConfig)
-
-	logger.Debugf("setting devices: %+v", devicesArgs)
-	if err := m.SetParentLinkLayerDevicesBeforeTheirChildren(devicesArgs); err != nil {
-		return errors.Trace(err)
-	}
-
-	logger.Debugf("setting addresses: %+v", devicesAddrs)
-	if err := m.SetDevicesAddressesIdempotently(devicesAddrs); err != nil {
-		return errors.Trace(err)
-	}
-
-	logger.Debugf("updated machine %q network config", m.Id())
-	return nil
-}
-
-func (p *ProvisionerAPI) getOneMachineProviderNetworkConfig(m *state.Machine) ([]params.NetworkConfig, error) {
-	instId, err := m.InstanceId()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	netEnviron, err := networkingcommon.NetworkingEnvironFromModelConfig(
-		stateenvirons.EnvironConfigGetter{p.st},
-	)
-	if errors.IsNotSupported(err) {
-		logger.Infof("not updating provider network config: %v", err)
-		return nil, nil
-	} else if err != nil {
-		return nil, errors.Annotate(err, "cannot get provider network config")
-	}
-
-	interfaceInfos, err := netEnviron.NetworkInterfaces(instId)
-	if err != nil {
-		return nil, errors.Annotatef(err, "cannot get network interfaces of %q", instId)
-	}
-	if len(interfaceInfos) == 0 {
-		logger.Infof("not updating provider network config: no interfaces returned")
-		return nil, nil
-	}
-
-	providerConfig := networkingcommon.NetworkConfigFromInterfaceInfo(interfaceInfos)
-	logger.Tracef("provider network config instance %q: %+v", instId, providerConfig)
-
-	return providerConfig, nil
-}
-
-func (p *ProvisionerAPI) SetHostMachineNetworkConfig(args params.SetMachineNetworkConfig) error {
-	logger.Criticalf("WEEEEEEEEEEEEEEEE: %+v", args.Tag)
-	m, err := p.getMachineForSettingNetworkConfig(args.Tag)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if m.IsContainer() {
-		return nil
-	}
-	observedConfig := args.Config
-	logger.Tracef("observed network config of machine %q: %+v", m.Id(), observedConfig)
-	if len(observedConfig) == 0 {
-		logger.Infof("not updating machine network config: no observed network config found")
-		return nil
-	}
-
-	providerConfig, err := p.getOneMachineProviderNetworkConfig(m)
-	if errors.IsNotProvisioned(err) {
-		logger.Infof("not updating provider network config: %v", err)
-		return nil
-	}
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if len(providerConfig) == 0 {
-		logger.Infof("not updating machine network config: no provider network config found")
-		return nil
-	}
-
-	mergedConfig := networkingcommon.MergeProviderAndObservedNetworkConfigs(providerConfig, observedConfig)
-	logger.Tracef("merged observed and provider network config: %+v", mergedConfig)
-
-	return p.setOneMachineNetworkConfig(m, mergedConfig)
 }
