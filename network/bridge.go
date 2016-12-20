@@ -26,11 +26,11 @@ type Bridger interface {
 	Bridge(deviceNames []string) error
 }
 
-type debianBridger struct {
+type etcNetworkInterfacesBridger struct {
 	cfg BridgerConfig
 }
 
-var _ Bridger = (*debianBridger)(nil)
+var _ Bridger = (*etcNetworkInterfacesBridger)(nil)
 
 // bestPythonVersion returns a string to the best python interpreter
 // found.
@@ -110,7 +110,7 @@ func runCommandWithTimeout(command string, timeout time.Duration, clock clock.Cl
 	return cmd.WaitWithCancel(cancel)
 }
 
-func (b *debianBridger) Bridge(deviceNames []string) error {
+func (b *etcNetworkInterfacesBridger) Bridge(deviceNames []string) error {
 	pythonVersion := bestPythonVersion()
 	if pythonVersion == "" {
 		return errors.New("no Python installation found")
@@ -147,7 +147,7 @@ func (b *debianBridger) Bridge(deviceNames []string) error {
 }
 
 func NewEtcNetworkInterfacesBridger(clock clock.Clock, timeout time.Duration, bridgePrefix string) Bridger {
-	return &debianBridger{
+	return &etcNetworkInterfacesBridger{
 		cfg: BridgerConfig{
 			Clock:        clock,
 			Timeout:      timeout,
