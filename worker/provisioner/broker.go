@@ -42,12 +42,7 @@ var resolvConf = "/etc/resolv.conf"
 
 var getObservedNetworkConfig = networkingcommon.GetObservedNetworkConfig
 
-func prepareHost(
-	bridger network.Bridger,
-	hostMachineID string,
-	api APICalls,
-	log loggo.Logger,
-) error {
+func prepareHost(bridger network.Bridger, hostMachineID string, api APICalls, log loggo.Logger) error {
 	devicesToBridge := []string{"ens3", "ens5"} // will come from api.PrepareContainerInterfaceInfo()
 
 	err := bridger.Bridge(devicesToBridge)
@@ -60,8 +55,6 @@ func prepareHost(
 
 	if err != nil {
 		return errors.Annotate(err, "cannot discover observed network config")
-	} else if len(observedConfig) == 0 {
-		logger.Warningf("not updating network config: no observed config found to update")
 	}
 
 	if len(observedConfig) > 0 {
