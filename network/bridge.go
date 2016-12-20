@@ -120,7 +120,7 @@ func (b *etcNetworkInterfacesBridger) Bridge(deviceNames []string) error {
 	tmpfile, err := writePythonScript(content, 0755)
 
 	if err != nil {
-		return errors.Trace(err)
+		return errors.Annotatef(err, "failed to write bridgescript")
 	}
 
 	defer os.Remove(tmpfile)
