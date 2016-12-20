@@ -146,13 +146,13 @@ func (b *etcNetworkInterfacesBridger) Bridge(deviceNames []string) error {
 	return err
 }
 
-func NewEtcNetworkInterfacesBridger(clock clock.Clock, timeout time.Duration, bridgePrefix string) Bridger {
+func NewEtcNetworkInterfacesBridger(clock clock.Clock, timeout time.Duration, bridgePrefix, filename string) Bridger {
 	return &etcNetworkInterfacesBridger{
 		cfg: BridgerConfig{
 			Clock:        clock,
 			Timeout:      timeout,
 			BridgePrefix: bridgePrefix,
-			InputFile:    "/etc/network/interfaces",
+			InputFile:    filename,
 		},
 	}
 }

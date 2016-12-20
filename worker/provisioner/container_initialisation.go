@@ -27,6 +27,11 @@ import (
 	"github.com/juju/juju/worker"
 )
 
+var (
+	systemNetworkInterfacesFile = "/etc/network/interfaces"
+	activateBridgesTimeout      = 5 * time.Minute
+)
+
 // ContainerSetup is a StringsWatchHandler that is notified when containers
 // are created on the given machine. It will set up the machine to be able
 // to create containers and start a suitable provisioner.
@@ -206,7 +211,7 @@ func (cs *ContainerSetup) getContainerArtifacts(
 	case instance.KVM:
 		initialiser = kvm.NewContainerInitialiser()
 		broker, err = NewKvmBroker(
-			network.NewEtcNetworkInterfacesBridger(clock.WallClock, 5*time.Minute, instancecfg.DefaultBridgePrefix),
+			network.NewEtcNetworkInterfacesBridger(clock.WallClock, activateBridgesTimeout, instancecfg.DefaultBridgePrefix, systemNetworkInterfacesFile),
 			cs.machine.Tag().String(),
 			cs.provisioner,
 			cs.config,
@@ -228,7 +233,7 @@ func (cs *ContainerSetup) getContainerArtifacts(
 			return nil, nil, nil, err
 		}
 		broker, err = NewLxdBroker(
-			network.NewEtcNetworkInterfacesBridger(clock.WallClock, 5*time.Minute, instancecfg.DefaultBridgePrefix),
+			network.NewEtcNetworkInterfacesBridger(clock.WallClock, activateBridgesTimeout, instancecfg.DefaultBridgePrefix, systemNetworkInterfacesFile),
 			cs.machine.Tag().String(),
 			cs.provisioner,
 			manager,
