@@ -48,7 +48,7 @@ func prepareHost(bridger network.Bridger, hostMachineID string, api APICalls, lo
 	err := bridger.Bridge(devicesToBridge)
 
 	if err != nil {
-		return errors.Trace(err)
+		return errors.Annotate(err, "failed to bridge devices")
 	}
 
 	observedConfig, err := getObservedNetworkConfig(common.DefaultNetworkConfigSource())

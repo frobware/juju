@@ -121,7 +121,7 @@ func (s *kvmBrokerSuite) TestStartInstanceBridgingFails(c *gc.C) {
 	machineId := "1/kvm/0"
 	s.bridgeError = errors.New("bridging failed")
 	_, err := s.startInstance(c, machineId)
-	c.Check(err, gc.ErrorMatches, "bridging failed")
+	c.Check(err, gc.ErrorMatches, "failed to bridge devices: bridging failed")
 	s.api.CheckCalls(c, []gitjujutesting.StubCall{{
 		FuncName: "ContainerConfig",
 	}})
