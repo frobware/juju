@@ -60,8 +60,6 @@ func (broker *lxdBroker) StartInstance(args environs.StartInstanceParams) (*envi
 	}
 
 	preparedInfo, err := prepareOrGetContainerInterfaceInfo(
-		broker.bridger,
-		broker.hostMachineID,
 		broker.api,
 		machineId,
 		bridgeDevice,
@@ -162,8 +160,6 @@ func (broker *lxdBroker) MaintainInstance(args environs.StartInstanceParams) err
 
 	// There's no InterfaceInfo we expect to get below.
 	_, err := prepareOrGetContainerInterfaceInfo(
-		broker.bridger,
-		broker.hostMachineID,
 		broker.api,
 		machineID,
 		bridgeDevice,

@@ -76,8 +76,6 @@ func prepareHost(
 }
 
 func prepareOrGetContainerInterfaceInfo(
-	bridger network.Bridger,
-	hostMachineID string,
 	api APICalls,
 	machineID string,
 	bridgeDevice string,
