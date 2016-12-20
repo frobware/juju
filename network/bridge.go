@@ -147,7 +147,7 @@ func (b *debianBridger) Bridge(deviceNames []string) error {
 }
 
 func NewEtcNetworkInterfacesBridger(clock clock.Clock, timeout time.Duration, bridgePrefix string) Bridger {
-	d := &debianBridger{
+	return &debianBridger{
 		cfg: BridgerConfig{
 			Clock:        clock,
 			Timeout:      timeout,
@@ -155,5 +155,4 @@ func NewEtcNetworkInterfacesBridger(clock clock.Clock, timeout time.Duration, br
 			InputFile:    "/etc/network/interfaces",
 		},
 	}
-	return d
 }
