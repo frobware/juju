@@ -73,7 +73,6 @@ func prepareOrGetContainerInterfaceInfo(
 	machineID string,
 	bridgeDevice string,
 	allocateOrMaintain bool,
-	startingNetworkInfo []network.InterfaceInfo,
 	log loggo.Logger,
 ) ([]network.InterfaceInfo, error) {
 	maintain := !allocateOrMaintain

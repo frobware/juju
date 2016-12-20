@@ -76,7 +76,6 @@ func (broker *kvmBroker) StartInstance(args environs.StartInstanceParams) (*envi
 		machineId,
 		bridgeDevice,
 		true, // allocate if possible, do not maintain existing.
-		args.NetworkInfo,
 		kvmLogger,
 	)
 	if err != nil {
@@ -164,7 +163,6 @@ func (broker *kvmBroker) MaintainInstance(args environs.StartInstanceParams) err
 		machineID,
 		bridgeDevice,
 		false, // maintain, do not allocate.
-		args.NetworkInfo,
 		kvmLogger,
 	)
 	return err

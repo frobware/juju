@@ -64,7 +64,6 @@ func (broker *lxdBroker) StartInstance(args environs.StartInstanceParams) (*envi
 		machineId,
 		bridgeDevice,
 		true, // allocate if possible, do not maintain existing.
-		args.NetworkInfo,
 		lxdLogger,
 	)
 	if err != nil {
@@ -164,7 +163,6 @@ func (broker *lxdBroker) MaintainInstance(args environs.StartInstanceParams) err
 		machineID,
 		bridgeDevice,
 		false, // maintain, do not allocate.
-		args.NetworkInfo,
 		lxdLogger,
 	)
 	return err
