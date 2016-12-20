@@ -18,7 +18,7 @@ import (
 	"gopkg.in/juju/names.v2"
 
 	"github.com/juju/juju/agent"
-	"github.com/juju/juju/apiserver/common/networkingcommon"
+	"github.com/juju/juju/api/common"
 	"github.com/juju/juju/apiserver/params"
 	"github.com/juju/juju/container"
 	"github.com/juju/juju/container/kvm/mock"
@@ -106,7 +106,7 @@ func (s *kvmBrokerSuite) maintainInstance(c *gc.C, machineId string) {
 }
 
 func (s *kvmBrokerSuite) TestStartInstanceGetObservedNetworkConfigFails(c *gc.C) {
-	s.PatchValue(provisioner.GetObservedNetworkConfig, func(_ networkingcommon.NetworkConfigSource) ([]params.NetworkConfig, error) {
+	s.PatchValue(provisioner.GetObservedNetworkConfig, func(_ common.NetworkConfigSource) ([]params.NetworkConfig, error) {
 		return nil, errors.New("TestStartInstanceObservedNetworkConfigFails no network")
 	})
 	machineId := "1/kvm/0"
@@ -128,7 +128,7 @@ func (s *kvmBrokerSuite) TestStartInstanceBridgingFails(c *gc.C) {
 }
 
 func (s *kvmBrokerSuite) TestStartInstanceWithoutNetworkChanges(c *gc.C) {
-	s.PatchValue(provisioner.GetObservedNetworkConfig, func(_ networkingcommon.NetworkConfigSource) ([]params.NetworkConfig, error) {
+	s.PatchValue(provisioner.GetObservedNetworkConfig, func(_ common.NetworkConfigSource) ([]params.NetworkConfig, error) {
 		return nil, nil
 	})
 	machineId := "1/kvm/0"
@@ -158,7 +158,7 @@ func (s *kvmBrokerSuite) TestStartInstanceWithHostNetworkChanges(c *gc.C) {
 		},
 	}
 
-	s.PatchValue(provisioner.GetObservedNetworkConfig, func(_ networkingcommon.NetworkConfigSource) ([]params.NetworkConfig, error) {
+	s.PatchValue(provisioner.GetObservedNetworkConfig, func(_ common.NetworkConfigSource) ([]params.NetworkConfig, error) {
 		return observedNetworkConfig, nil
 	})
 
@@ -270,7 +270,7 @@ func (s *kvmBrokerSuite) TestStartInstancePopulatesNetworkInfo(c *gc.C) {
 }
 
 func (s *kvmBrokerSuite) TestStartInstancePopulatesFallbackNetworkInfo(c *gc.C) {
-	s.PatchValue(provisioner.GetObservedNetworkConfig, func(_ networkingcommon.NetworkConfigSource) ([]params.NetworkConfig, error) {
+	s.PatchValue(provisioner.GetObservedNetworkConfig, func(_ common.NetworkConfigSource) ([]params.NetworkConfig, error) {
 		return nil, nil
 	})
 	patchResolvConf(s, c)

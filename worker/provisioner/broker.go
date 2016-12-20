@@ -10,7 +10,7 @@ import (
 	"github.com/juju/version"
 	"gopkg.in/juju/names.v2"
 
-	"github.com/juju/juju/apiserver/common/networkingcommon"
+	"github.com/juju/juju/api/common"
 	"github.com/juju/juju/apiserver/params"
 	"github.com/juju/juju/container"
 	"github.com/juju/juju/instance"
@@ -40,7 +40,7 @@ func (h hostArchToolsFinder) FindTools(v version.Number, series, _ string) (tool
 // system. Defined here so it can be overriden for testing.
 var resolvConf = "/etc/resolv.conf"
 
-var getObservedNetworkConfig = networkingcommon.GetObservedNetworkConfig
+var getObservedNetworkConfig = common.GetObservedNetworkConfig
 
 func prepareHost(bridger network.Bridger, hostMachineID string, api APICalls, log loggo.Logger) error {
 	devicesToBridge := []string{"ens3", "ens5"} // will come from api.PrepareContainerInterfaceInfo()
@@ -51,7 +51,7 @@ func prepareHost(bridger network.Bridger, hostMachineID string, api APICalls, lo
 		return errors.Trace(err)
 	}
 
-	observedConfig, err := getObservedNetworkConfig(networkingcommon.DefaultNetworkConfigSource())
+	observedConfig, err := getObservedNetworkConfig(common.DefaultNetworkConfigSource())
 
 	if err != nil {
 		return errors.Annotate(err, "cannot discover observed network config")

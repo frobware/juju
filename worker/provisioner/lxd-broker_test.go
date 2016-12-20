@@ -15,7 +15,7 @@ import (
 	"gopkg.in/juju/names.v2"
 
 	"github.com/juju/juju/agent"
-	"github.com/juju/juju/apiserver/common/networkingcommon"
+	"github.com/juju/juju/api/common"
 	"github.com/juju/juju/apiserver/params"
 	"github.com/juju/juju/cloudconfig/instancecfg"
 	"github.com/juju/juju/constraints"
@@ -85,7 +85,7 @@ func (s *lxdBrokerSuite) TestStartInstanceBridgingFails(c *gc.C) {
 }
 
 func (s *lxdBrokerSuite) TestStartInstanceGetObservedNetworkConfigFails(c *gc.C) {
-	s.PatchValue(provisioner.GetObservedNetworkConfig, func(_ networkingcommon.NetworkConfigSource) ([]params.NetworkConfig, error) {
+	s.PatchValue(provisioner.GetObservedNetworkConfig, func(_ common.NetworkConfigSource) ([]params.NetworkConfig, error) {
 		return nil, errors.New("TestStartInstanceWithHostNetworkChanges no network")
 	})
 
@@ -99,7 +99,7 @@ func (s *lxdBrokerSuite) TestStartInstanceGetObservedNetworkConfigFails(c *gc.C)
 }
 
 func (s *lxdBrokerSuite) TestStartInstanceWithoutHostNetworkChanges(c *gc.C) {
-	s.PatchValue(provisioner.GetObservedNetworkConfig, func(_ networkingcommon.NetworkConfigSource) ([]params.NetworkConfig, error) {
+	s.PatchValue(provisioner.GetObservedNetworkConfig, func(_ common.NetworkConfigSource) ([]params.NetworkConfig, error) {
 		return nil, nil
 	})
 	machineId := "1/lxd/0"
@@ -132,7 +132,7 @@ func (s *lxdBrokerSuite) TestStartInstanceWithHostNetworkChanges(c *gc.C) {
 		},
 	}
 
-	s.PatchValue(provisioner.GetObservedNetworkConfig, func(_ networkingcommon.NetworkConfigSource) ([]params.NetworkConfig, error) {
+	s.PatchValue(provisioner.GetObservedNetworkConfig, func(_ common.NetworkConfigSource) ([]params.NetworkConfig, error) {
 		return observedNetworkConfig, nil
 	})
 
@@ -180,7 +180,7 @@ func (s *lxdBrokerSuite) TestStartInstancePopulatesNetworkInfo(c *gc.C) {
 }
 
 func (s *lxdBrokerSuite) TestStartInstancePopulatesFallbackNetworkInfo(c *gc.C) {
-	s.PatchValue(provisioner.GetObservedNetworkConfig, func(_ networkingcommon.NetworkConfigSource) ([]params.NetworkConfig, error) {
+	s.PatchValue(provisioner.GetObservedNetworkConfig, func(_ common.NetworkConfigSource) ([]params.NetworkConfig, error) {
 		return nil, nil
 	})
 
