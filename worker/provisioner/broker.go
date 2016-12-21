@@ -24,6 +24,7 @@ type APICalls interface {
 	GetContainerInterfaceInfo(names.MachineTag) ([]network.InterfaceInfo, error)
 	ReleaseContainerAddresses(names.MachineTag) error
 	SetHostMachineNetworkConfig(string, []params.NetworkConfig) error
+	HostChangesForContainer(containerTag names.MachineTag) ([]network.DeviceToBridge, error)
 }
 
 type hostArchToolsFinder struct {
@@ -42,14 +43,34 @@ var resolvConf = "/etc/resolv.conf"
 
 var getObservedNetworkConfig = common.GetObservedNetworkConfig
 
-func prepareHost(bridger network.Bridger, hostMachineID string, api APICalls, log loggo.Logger) error {
-	devicesToBridge := []string{"ens3", "ens5"} // will come from api.PrepareContainerInterfaceInfo()
+func prepareHost(bridger network.Bridger, hostMachineID string, containerTag names.MachineTag, api APICalls, log loggo.Logger) error {
+	devicesToBridge, err := api.HostChangesForContainer(containerTag)
 
-	err := bridger.Bridge(devicesToBridge)
+	if err != nil {
+		return errors.Annotate(err, "failed to get host changes required for container")
+	}
+
+	if len(devicesToBridge) == 0 {
+		log.Tracef("No devices require bridging to host container %v on host %q", containerTag, hostMachineID)
+		return nil
+	}
+
+	deviceNamesToBridge := make([]string, len(devicesToBridge))
+
+	for i, v := range devicesToBridge {
+		deviceNamesToBridge[i] = v.DeviceName
+	}
+
+	log.Tracef("Bridging %q devices on host %q", deviceNamesToBridge, hostMachineID)
+
+	err = bridger.Bridge(deviceNamesToBridge)
 
 	if err != nil {
 		return errors.Annotate(err, "failed to bridge devices")
 	}
+
+	// We just changed the hosts' network setup so discover new
+	// interfaces/devices and propagate to state.
 
 	observedConfig, err := getObservedNetworkConfig(common.DefaultNetworkConfigSource())
 

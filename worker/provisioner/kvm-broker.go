@@ -6,6 +6,7 @@ package provisioner
 import (
 	"github.com/juju/errors"
 	"github.com/juju/loggo"
+	"gopkg.in/juju/names.v2"
 
 	"github.com/juju/juju/agent"
 	"github.com/juju/juju/cloudconfig/instancecfg"
@@ -49,8 +50,8 @@ type kvmBroker struct {
 // StartInstance is specified in the Broker interface.
 func (broker *kvmBroker) StartInstance(args environs.StartInstanceParams) (*environs.StartInstanceResult, error) {
 	// TODO: refactor common code out of the container brokers.
-	machineId := args.InstanceConfig.MachineId
-	kvmLogger.Infof("starting kvm container for machineId: %s", machineId)
+	containerMachineID := args.InstanceConfig.MachineId
+	kvmLogger.Infof("starting kvm container for containerMachineID: %s", containerMachineID)
 
 	// TODO: Default to using the host network until we can configure.  Yes,
 	// this is using the LxcBridge value, we should put it in the api call for
@@ -66,14 +67,14 @@ func (broker *kvmBroker) StartInstance(args environs.StartInstanceParams) (*envi
 		return nil, err
 	}
 
-	err = prepareHost(broker.bridger, broker.hostMachineID, broker.api, kvmLogger)
+	err = prepareHost(broker.bridger, broker.hostMachineID, names.NewMachineTag(containerMachineID), broker.api, kvmLogger)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	preparedInfo, err := prepareOrGetContainerInterfaceInfo(
 		broker.api,
-		machineId,
+		containerMachineID,
 		bridgeDevice,
 		true, // allocate if possible, do not maintain existing.
 		kvmLogger,
@@ -81,7 +82,7 @@ func (broker *kvmBroker) StartInstance(args environs.StartInstanceParams) (*envi
 	if err != nil {
 		// It's not fatal (yet) if we couldn't pre-allocate addresses for the
 		// container.
-		logger.Warningf("failed to prepare container %q network config: %v", machineId, err)
+		logger.Warningf("failed to prepare container %q network config: %v", containerMachineID, err)
 	} else {
 		args.NetworkInfo = preparedInfo
 	}
@@ -137,7 +138,7 @@ func (broker *kvmBroker) StartInstance(args environs.StartInstanceParams) (*envi
 		kvmLogger.Errorf("failed to start container: %v", err)
 		return nil, err
 	}
-	kvmLogger.Infof("started kvm container for machineId: %s, %s, %s", machineId, inst.Id(), hardware.String())
+	kvmLogger.Infof("started kvm container for containerMachineID: %s, %s, %s", containerMachineID, inst.Id(), hardware.String())
 	return &environs.StartInstanceResult{
 		Instance:    inst,
 		Hardware:    hardware,
