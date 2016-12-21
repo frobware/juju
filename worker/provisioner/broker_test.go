@@ -46,6 +46,7 @@ type fakeAPI struct {
 
 	fakeContainerConfig params.ContainerConfig
 	fakeInterfaceInfo   network.InterfaceInfo
+	fakeDeviceToBridge  network.DeviceToBridge
 	fakeBridger         network.Bridger
 }
 
@@ -63,6 +64,11 @@ var fakeInterfaceInfo network.InterfaceInfo = network.InterfaceInfo{
 	// by patchResolvConf(). See LP bug http://pad.lv/1575940 for more info.
 	DNSServers:       network.NewAddresses("ns1.dummy"),
 	DNSSearchDomains: nil,
+}
+
+var fakeDeviceToBridge network.DeviceToBridge = network.DeviceToBridge{
+	DeviceName: "dummy0",
+	BridgeName: "br-dummy0",
 }
 
 var fakeContainerConfig = params.ContainerConfig{
@@ -118,6 +124,14 @@ func (f *fakeAPI) SetHostMachineNetworkConfig(hostMachineID string, netConfig []
 		return err
 	}
 	return nil
+}
+
+func (f *fakeAPI) HostChangesForContainer(machineID names.MachineTag) ([]network.DeviceToBridge, error) {
+	f.MethodCall(f, "HostChangesForContainer", machineID)
+	if err := f.NextErr(); err != nil {
+		return nil, err
+	}
+	return []network.DeviceToBridge{f.fakeDeviceToBridge}, nil
 }
 
 type patcher interface {

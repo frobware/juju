@@ -114,16 +114,9 @@ func (s *kvmBrokerSuite) TestStartInstanceGetObservedNetworkConfigFails(c *gc.C)
 	c.Check(err, gc.ErrorMatches, ".*TestStartInstanceObservedNetworkConfigFails no network")
 	s.api.CheckCalls(c, []gitjujutesting.StubCall{{
 		FuncName: "ContainerConfig",
-	}})
-}
-
-func (s *kvmBrokerSuite) TestStartInstanceBridgingFails(c *gc.C) {
-	machineId := "1/kvm/0"
-	s.bridgeError = errors.New("bridging failed")
-	_, err := s.startInstance(c, machineId)
-	c.Check(err, gc.ErrorMatches, "failed to bridge devices: bridging failed")
-	s.api.CheckCalls(c, []gitjujutesting.StubCall{{
-		FuncName: "ContainerConfig",
+	}, {
+		FuncName: "HostChangesForContainer",
+		Args:     []interface{}{names.NewMachineTag("1-kvm-0")},
 	}})
 }
 
@@ -136,6 +129,9 @@ func (s *kvmBrokerSuite) TestStartInstanceWithoutNetworkChanges(c *gc.C) {
 	c.Assert(err, jc.ErrorIsNil)
 	s.api.CheckCalls(c, []gitjujutesting.StubCall{{
 		FuncName: "ContainerConfig",
+	}, {
+		FuncName: "HostChangesForContainer",
+		Args:     []interface{}{names.NewMachineTag("1-kvm-0")},
 	}, {
 		FuncName: "PrepareContainerInterfaceInfo",
 		Args:     []interface{}{names.NewMachineTag("1-kvm-0")},
@@ -167,6 +163,11 @@ func (s *kvmBrokerSuite) TestStartInstanceWithHostNetworkChanges(c *gc.C) {
 	c.Assert(err, jc.ErrorIsNil)
 	s.api.CheckCalls(c, []gitjujutesting.StubCall{{
 		FuncName: "ContainerConfig",
+	}, {
+		FuncName: "HostChangesForContainer",
+		Args: []interface{}{
+			names.NewMachineTag("1-kvm-0"),
+		},
 	}, {
 		FuncName: "SetHostMachineNetworkConfig",
 		Args: []interface{}{
@@ -277,6 +278,7 @@ func (s *kvmBrokerSuite) TestStartInstancePopulatesFallbackNetworkInfo(c *gc.C) 
 
 	s.api.SetErrors(
 		nil, // ContainerConfig succeeds
+		nil, // HostChangesForContainer succeeds
 		errors.NotSupportedf("container address allocation"),
 	)
 	result, err := s.startInstance(c, "1/kvm/2")

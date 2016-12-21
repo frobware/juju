@@ -74,16 +74,6 @@ func (s *lxdBrokerSuite) startInstance(c *gc.C, machineId string) (*environs.Sta
 	return callStartInstance(c, s, s.broker, machineId)
 }
 
-func (s *lxdBrokerSuite) TestStartInstanceBridgingFails(c *gc.C) {
-	machineId := "1/lxd/0"
-	s.bridgeError = errors.New("bridging failed")
-	_, err := s.startInstance(c, machineId)
-	c.Check(err, gc.ErrorMatches, "failed to bridge devices: bridging failed")
-	s.api.CheckCalls(c, []gitjujutesting.StubCall{{
-		FuncName: "ContainerConfig",
-	}})
-}
-
 func (s *lxdBrokerSuite) TestStartInstanceGetObservedNetworkConfigFails(c *gc.C) {
 	s.PatchValue(provisioner.GetObservedNetworkConfig, func(_ common.NetworkConfigSource) ([]params.NetworkConfig, error) {
 		return nil, errors.New("TestStartInstanceWithHostNetworkChanges no network")
@@ -95,6 +85,9 @@ func (s *lxdBrokerSuite) TestStartInstanceGetObservedNetworkConfigFails(c *gc.C)
 
 	s.api.CheckCalls(c, []gitjujutesting.StubCall{{
 		FuncName: "ContainerConfig",
+	}, {
+		FuncName: "HostChangesForContainer",
+		Args:     []interface{}{names.NewMachineTag("1-lxd-0")},
 	}})
 }
 
@@ -106,6 +99,9 @@ func (s *lxdBrokerSuite) TestStartInstanceWithoutHostNetworkChanges(c *gc.C) {
 	s.startInstance(c, machineId)
 	s.api.CheckCalls(c, []gitjujutesting.StubCall{{
 		FuncName: "ContainerConfig",
+	}, {
+		FuncName: "HostChangesForContainer",
+		Args:     []interface{}{names.NewMachineTag("1-lxd-0")},
 	}, {
 		FuncName: "PrepareContainerInterfaceInfo",
 		Args:     []interface{}{names.NewMachineTag("1-lxd-0")},
@@ -141,6 +137,11 @@ func (s *lxdBrokerSuite) TestStartInstanceWithHostNetworkChanges(c *gc.C) {
 
 	s.api.CheckCalls(c, []gitjujutesting.StubCall{{
 		FuncName: "ContainerConfig",
+	}, {
+		FuncName: "HostChangesForContainer",
+		Args: []interface{}{
+			names.NewMachineTag("1-lxd-0"),
+		},
 	}, {
 		FuncName: "SetHostMachineNetworkConfig",
 		Args: []interface{}{
@@ -188,6 +189,7 @@ func (s *lxdBrokerSuite) TestStartInstancePopulatesFallbackNetworkInfo(c *gc.C) 
 
 	s.api.SetErrors(
 		nil, // ContainerConfig succeeds
+		nil, // HostChangesForContainer succeeds
 		errors.NotSupportedf("container address allocation"),
 	)
 	result, err := s.startInstance(c, "1/lxd/0")

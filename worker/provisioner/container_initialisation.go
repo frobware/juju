@@ -207,11 +207,13 @@ func (cs *ContainerSetup) getContainerArtifacts(
 		return nil, nil, nil, err
 	}
 
+	bridger := network.NewEtcNetworkInterfacesBridger(clock.WallClock, activateBridgesTimeout, instancecfg.DefaultBridgePrefix, systemNetworkInterfacesFile)
+
 	switch containerType {
 	case instance.KVM:
 		initialiser = kvm.NewContainerInitialiser()
 		broker, err = NewKvmBroker(
-			network.NewEtcNetworkInterfacesBridger(clock.WallClock, activateBridgesTimeout, instancecfg.DefaultBridgePrefix, systemNetworkInterfacesFile),
+			bridger,
 			cs.machine.Tag().String(),
 			cs.provisioner,
 			cs.config,
@@ -233,7 +235,7 @@ func (cs *ContainerSetup) getContainerArtifacts(
 			return nil, nil, nil, err
 		}
 		broker, err = NewLxdBroker(
-			network.NewEtcNetworkInterfacesBridger(clock.WallClock, activateBridgesTimeout, instancecfg.DefaultBridgePrefix, systemNetworkInterfacesFile),
+			bridger,
 			cs.machine.Tag().String(),
 			cs.provisioner,
 			manager,
